@@ -43,9 +43,17 @@
  * FreeRTOS 를 쓰려면 CONFIG_KERNEL / PLATFORM_FREERTOS 를 정의하고
  * TASK_SCHEDULER_DISABLED 를 0 으로 바꾼다. fwlib 에서 이 매크로를 보는 곳은
  * basic_types.h 와 ameba_soc.h 두 곳이다. */
+/* osdep_service.h 가 PLATFORM_FREERTOS 로 freertos_service.h 를 고른다.
+ * CMake 의 NU87_RTOS 옵션과 짝을 이뤄야 한다. */
+#ifdef _USE_HW_RTOS
+#define CONFIG_KERNEL               1
+#define PLATFORM_FREERTOS           1
+#define TASK_SCHEDULER_DISABLED     (0)
+#else
 #undef  CONFIG_KERNEL
 #undef  PLATFORM_FREERTOS
 #define TASK_SCHEDULER_DISABLED     (1)
+#endif
 
 /* ── 무선 (미사용) ───────────────────────────────────────────────────── */
 #undef  CONFIG_WIFI_EN

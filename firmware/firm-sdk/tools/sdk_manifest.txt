@@ -156,6 +156,10 @@ project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/l
 # (ATOMIC_*, rtw_*, device_mutex_*, save_flags/restore_flags 등).
 component/os/os_dep/                                  -> os_dep/
 component/os/freertos/freertos_service.c              -> freertos/freertos_service.c
+component/os/freertos/freertos_service.h              -> freertos/freertos_service.h
+# PLATFORM_FREERTOS 가 켜지면 ameba_soc.h 가 이 헤더들을 include 한다.
+component/os/freertos/freertos_pmu.h                  -> freertos/freertos_pmu.h
+component/os/freertos/freertos_heap5_config.h         -> freertos/freertos_heap5_config.h
 
 # WLAN 드라이버와 lwIP 사이의 접착부. LwIP_GetIP / rltk_wlan_* / xnetif.
 component/common/drivers/wlan/realtek/src/osdep/      -> wlan/osdep/
