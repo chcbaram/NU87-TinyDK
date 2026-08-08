@@ -28,6 +28,11 @@ bool hwInit(void)
 {
   cliInit();
   logInit();
+#ifdef _USE_HW_THREAD
+  /* 스레드 레지스트리. 뮤텍스를 만들므로 스케줄러가 돈 뒤여야 한다.
+   * hwInit() 은 mainThread 안에서 불리므로 조건이 맞는다. */
+  threadInit();
+#endif
   swtimerInit();
   ledInit();
   uartInit();

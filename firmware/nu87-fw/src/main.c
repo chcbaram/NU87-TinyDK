@@ -3,39 +3,48 @@
 
 
 #ifdef _USE_HW_RTOS
-static void mainThread(void const *arg);
+static void mainThread(void *arg);
 
+
+static void ledErrorBlink(void)
+{
+  ledInit();
+
+  while (1)
+  {
+    ledOn(_DEF_LED1);
+    delayUs(50 * 1000);
+    ledOff(_DEF_LED1);
+    delayUs(50 * 1000);
+    ledOn(_DEF_LED1);
+    delayUs(500 * 1000);
+    ledOff(_DEF_LED1);
+    delayUs(500 * 1000);
+  }
+}
 
 int main(void)
 {
   bspInit();
 
-
-  osThreadDef(main, mainThread, _HW_DEF_THREAD_MAIN_PRI, 0, _HW_DEF_THREAD_MAIN_STACK/4);
-  if (osThreadCreate(osThread(main), NULL) == NULL)
+  if (xTaskCreate(mainThread,
+                  "main",
+                  _HW_DEF_RTOS_THREAD_MEM_MAIN / sizeof(StackType_t),
+                  NULL,
+                  _HW_DEF_RTOS_THREAD_PRI_MAIN,
+                  NULL) != pdPASS)
   {
-    ledInit();
-
-    while(1)
-    {
-      ledOn(_DEF_LED1);
-      delay(50);
-      ledOff(_DEF_LED1);
-      delay(50);
-      ledOn(_DEF_LED1);
-      delay(500);
-      ledOff(_DEF_LED1);
-      delay(500);      
-    }
+    ledErrorBlink();
   }
 
-  osKernelStart();  
+  vTaskStartScheduler();
+
   return 0;
 }
 
-void mainThread(void const *arg)
+void mainThread(void *arg)
 {
-  UNUSED(arg);
+  (void)arg;
 
   hwInit();
   apInit();
@@ -45,7 +54,7 @@ void mainThread(void const *arg)
 int main(void)
 {
   bspInit();
-  
+
   hwInit();
   apInit();
   apMain();

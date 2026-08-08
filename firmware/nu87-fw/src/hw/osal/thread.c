@@ -1,7 +1,6 @@
 #include "osal/thread.h"
 
 
-
 #ifdef _USE_HW_THREAD
 #include "cli.h"
 
@@ -12,19 +11,18 @@
 
 typedef struct thread_t_
 {
-  char          name[32];
-  void         (*main)(void const *arg);
-  void          *arg;
-  bool          is_begin;
-  osPriority    priority;
-  uint32_t      stack_bytes;
-  osThreadDef_t thread_def;
-  osThreadId    thread_id;
+  char        name[configMAX_TASK_NAME_LEN];
+  void       (*main)(void *arg);
+  void        *arg;
+  bool        is_begin;
+  uint32_t    priority;
+  uint32_t    stack_bytes;
+  TaskHandle_t handle;
 } thread_t;
 
 typedef struct
 {
-  int32_t count;
+  int32_t  count;
   thread_t thread[THREAD_MAX_CNT];
 } thread_info_t;
 
@@ -39,13 +37,15 @@ static thread_info_t info;
 
 
 
-
 bool threadInit(void)
 {
-  info.count = 0;
+  memset(&info, 0, sizeof(thread_info_t));
 
   mutex_lock = xSemaphoreCreateMutex();
-  memset(&info, 0, sizeof(thread_info_t));
+  if (mutex_lock == NULL)
+  {
+    return false;
+  }
 
   logPrintf("[OK] threadInit()\n");
 
@@ -53,21 +53,23 @@ bool threadInit(void)
   return true;
 }
 
-bool threadCreate(const char *name, void (*func)(void const *arg), void *arg, osPriority priority, uint32_t stack_bytes)
+bool threadCreate(const char *name, void (*func)(void *arg), void *arg,
+                  uint32_t priority, uint32_t stack_bytes)
 {
   bool ret = false;
   uint32_t index;
-  assert(info.count < THREAD_MAX_CNT);
 
+  assert(info.count < THREAD_MAX_CNT);
 
   lock();
   if (info.count < THREAD_MAX_CNT)
-  {    
+  {
     index = info.count;
 
-    strcpy(info.thread[index].name, name);
-    info.thread[index].main = func;
-    info.thread[index].priority = priority;
+    strncpy(info.thread[index].name, name, sizeof(info.thread[index].name) - 1);
+    info.thread[index].main        = func;
+    info.thread[index].arg         = arg;
+    info.thread[index].priority    = priority;
     info.thread[index].stack_bytes = stack_bytes;
 
     info.count = index + 1;
@@ -85,33 +87,36 @@ bool threadBegin(void)
 
   lock();
   logPrintf("[  ] threadBegin()\n");
-  logPrintf("       count : %d\n", info.count);
+  logPrintf("       count : %d\n", (int)info.count);
 
-  for (int i=0; i<info.count; i++)
+  for (int i = 0; i < info.count; i++)
   {
     if (info.thread[i].main != NULL && info.thread[i].is_begin == false)
     {
-      info.thread[i].thread_def.name      = (char *)info.thread[i].name;
-      info.thread[i].thread_def.pthread   = info.thread[i].main;
-      info.thread[i].thread_def.instances = 0;
-      info.thread[i].thread_def.stacksize = info.thread[i].stack_bytes/4;
-      info.thread[i].thread_def.tpriority = info.thread[i].priority;
-      info.thread[i].thread_id = osThreadCreate(&info.thread[i].thread_def, info.thread[i].arg);
-      assert(info.thread[i].thread_id);
+      BaseType_t err;
 
-      if (info.thread[i].thread_id != NULL)
+      err = xTaskCreate(info.thread[i].main,
+                        info.thread[i].name,
+                        info.thread[i].stack_bytes / sizeof(StackType_t),
+                        info.thread[i].arg,
+                        info.thread[i].priority,
+                        &info.thread[i].handle);
+
+      if (err == pdPASS)
       {
         info.thread[i].is_begin = true;
         logPrintf("       OK   - %s\n", info.thread[i].name);
       }
       else
       {
-        logPrintf("       Fail - %s Fail\n", info.thread[i].name);
+        logPrintf("       Fail - %s\n", info.thread[i].name);
+        ret = false;
       }
     }
   }
 
-  logPrintf("       Free Heap : %d bytes / %d bytes\n", xPortGetFreeHeapSize(), configTOTAL_HEAP_SIZE);
+  logPrintf("       Free Heap : %d bytes / %d bytes\n",
+            (int)xPortGetFreeHeapSize(), (int)configTOTAL_HEAP_SIZE);
   unLock();
 
   is_begin = true;
@@ -130,37 +135,50 @@ void cliThread(cli_args_t *args)
     thread_t *p_thread;
     TaskStatus_t task_status;
 
-    cliPrintf("cpu usage : %d %%\n", osGetCPUUsage());
-    cliPrintf("is_begin  : %s\n", is_begin ? "True":"False");
-    cliPrintf("count     : %d\n", info.count);
+    cliPrintf("is_begin  : %s\n", is_begin ? "True" : "False");
+    cliPrintf("count     : %d\n", (int)info.count);
+    cliPrintf("free heap : %d / %d bytes\n",
+              (int)xPortGetFreeHeapSize(), (int)configTOTAL_HEAP_SIZE);
+
     p_thread = info.thread;
-    for (int i=0; i<info.count; i++)
+    for (int i = 0; i < info.count; i++)
     {
-      vTaskGetInfo(p_thread[i].thread_id, &task_status, pdTRUE, eInvalid);
+      if (p_thread[i].handle == NULL)
+      {
+        cliPrintf("%-16s, (not started)\n", p_thread[i].name);
+        continue;
+      }
+
+      vTaskGetInfo(p_thread[i].handle, &task_status, pdTRUE, eInvalid);
 
       cliPrintf("%-16s, stack : %4d free %04d, prio : %d\n",
                 p_thread[i].name,
-                p_thread[i].stack_bytes,
-                (int)task_status.usStackHighWaterMark * 4,
-                p_thread[i].priority
-                );
+                (int)p_thread[i].stack_bytes,
+                (int)task_status.usStackHighWaterMark * (int)sizeof(StackType_t),
+                (int)p_thread[i].priority);
     }
     ret = true;
   }
 
   if (args->argc == 1 && args->isStr(0, "task"))
   {
-    const size_t bytes_per_task = 40;
+    const size_t bytes_per_task = 48;
     char *list_buf;
 
     list_buf = (char *)pvPortMalloc(uxTaskGetNumberOfTasks() * bytes_per_task);
+    if (list_buf != NULL)
+    {
+      vTaskList(list_buf);
+      cliPrintf("Task Name\tState\tPrio\tStack\tNum#\n");
+      cliWrite((uint8_t *)list_buf, strlen(list_buf));
+      vPortFree(list_buf);
 
-    vTaskList(list_buf);
-    cliPrintf("Task Name\tState\tPrio\tStack\tNum#\n");
-    cliWrite((uint8_t *)list_buf, strlen(list_buf));
-    vPortFree(list_buf);
-
-    cliPrintf("Free Heap : %d bytes\n", xPortGetFreeHeapSize());
+      cliPrintf("Free Heap : %d bytes\n", (int)xPortGetFreeHeapSize());
+    }
+    else
+    {
+      cliPrintf("pvPortMalloc fail\n");
+    }
     ret = true;
   }
 

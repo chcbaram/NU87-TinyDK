@@ -8,6 +8,7 @@ extern "C" {
 #include "hw_def.h"
 
 
+#include "osal/thread.h"
 #include "led.h"
 #include "gpio.h"
 #include "reset.h"

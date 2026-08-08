@@ -16,8 +16,11 @@ extern "C" {
 typedef int16_t thread_id_t;
 
 
+/* threadCreate() 는 등록만 하고 threadBegin() 이 한꺼번에 만든다.
+ * priority 는 벤더 SDK 와 같은 축(0 ~ configMAX_PRIORITIES-1), stack_bytes 는 바이트다. */
 bool threadInit(void);
-bool threadCreate(const char *name, void (*func)(void const *arg), void *arg, osPriority priority, uint32_t stack_bytes);
+bool threadCreate(const char *name, void (*func)(void *arg), void *arg,
+                  uint32_t priority, uint32_t stack_bytes);
 bool threadBegin(void);
 
 #endif

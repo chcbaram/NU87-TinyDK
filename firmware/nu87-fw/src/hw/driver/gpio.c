@@ -1,28 +1,8 @@
 /*
- * gpio.c — P1/P2 확장 헤더 GPIO (RTL8720DF)
+ * gpio.c — P1/P2 확장 헤더 GPIO
  *
- * 보드에 고정 기능이 배정된 GPIO 가 없어서 확장 헤더로 나온 핀을 채널로 연다.
- * 채널 이름은 "헤더_핀번호_MCU핀" 형태라 실크와 그대로 대응된다.
- *
- * 헤더로 나오지만 채널에 넣지 않은 핀:
- *   PA12 / PA13 / PA14   RGB LED (led.c)
- *   PA27 / PB3           SWDIO / SWCLK
- *   PA25 / PA26          네이티브 USB D- / D+
- *   PA28                 RREF. 외부 12K 고정이라 구동하면 안 된다
- *   PA30                 모듈 레귤레이터 모드 스트랩. 내부 10K 풀업
- *   PA7 / PA8            LOGUART. PA7 은 UART_DOWNLOAD 스트랩이기도 하다
- *
- * 반전은 하지 않는다. 1 을 쓰면 High 가 나가고, 읽으면 핀의 논리 레벨 그대로다.
- *
- * 실측 메모 — 아무것도 꽂지 않은 상태에서 입력 + 내부 풀업으로 읽으면
- * PB1 / PB18 / PB19 / PB20 / PB21 / PB22 는 1 로 올라오는데
- * PA15 와 PB23 은 0 으로 읽힌다. 두 핀 모두 출력으로 쓰면 1/0 이 정상적으로
- * 나가므로 핀 자체는 멀쩡하고, 내부 풀업만 듣지 않는 것이다.
- *   PA15  eFuse 로 기능이 정해지는 핀이다 (PA13/PA15/PA25/PA28/PB1/PB19/PB22)
- *   PB23  헤더 실크가 "PB23/PB24" 로 모호하다. 실제 배선을 확인해야 한다
- * 이 두 핀을 입력으로 쓸 때는 외부 풀업을 다는 편이 안전하다.
- *
- * GPIO_Init / GPIO_WriteBit / GPIO_ReadDataBit 는 칩 마스크 ROM 에 있다.
+ * PA15 와 PB23 은 내부 풀업이 듣지 않아 입력으로 두면 0 으로 읽힌다.
+ * 출력으로는 정상 동작하므로 입력으로 쓸 때만 외부 풀업을 단다.
  */
 
 #include "gpio.h"
@@ -37,9 +17,9 @@
 
 typedef struct
 {
-  uint8_t       pin;          // _PA_x / _PB_x
-  uint8_t       mode;         // _DEF_INPUT / _DEF_OUTPUT (+ PULLUP/PULLDOWN)
-  bool          init_value;   // 출력일 때 초기값
+  uint8_t       pin;
+  uint8_t       mode;
+  bool          init_value;
   GpioPinName_t pin_name;
   const char   *p_name;
 } gpio_tbl_t;
@@ -91,8 +71,7 @@ bool gpioPinMode(uint8_t ch, uint8_t mode)
 
   if (ch >= GPIO_MAX_CH) return false;
 
-  /* GPIO_Init() 이 Pinmux_Config(PINMUX_FUNCTION_GPIO) 와 PAD_PullCtrl() 을
-   * 내부에서 수행하므로 따로 호출하지 않는다. */
+  /* GPIO_Init() 이 Pinmux_Config() 와 PAD_PullCtrl() 까지 수행한다 */
   gpio_init.GPIO_Pin  = gpio_tbl[ch].pin;
   gpio_init.GPIO_Mode = (mode & _DEF_OUTPUT) ? GPIO_Mode_OUT : GPIO_Mode_IN;
 
@@ -132,7 +111,7 @@ void gpioPinToggle(uint8_t ch)
 {
   if (ch >= GPIO_MAX_CH) return;
 
-  /* RTL8720DF 에는 GPIO toggle API 가 없다. 읽어서 반전한다. */
+  /* toggle API 가 없어 읽어서 반전한다 */
   GPIO_WriteBit(gpio_tbl[ch].pin, GPIO_ReadDataBit(gpio_tbl[ch].pin) ? 0 : 1);
 }
 

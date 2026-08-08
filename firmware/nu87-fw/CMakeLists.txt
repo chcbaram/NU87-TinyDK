@@ -32,6 +32,7 @@ file(GLOB SRC_FILES CONFIGURE_DEPENDS
   src/*.c
   src/bsp/*.c
   src/bsp/device/*.c
+  src/bsp/rtos/*.c
 )
 
 # 하위폴더에 있는 파일까지 포함한다.
@@ -52,6 +53,43 @@ file(GLOB SRC_FILES_VENDOR CONFIGURE_DEPENDS
   ${REALTEK_DIR}/fwlib/ram_common/*.c
   ${REALTEK_DIR}/fwlib/usrcfg/*.c
 )
+
+# ── FreeRTOS 사용 여부 ──────────────────────────────────────────────────────
+#   ON  (기본) 커널을 링크하고 _USE_HW_RTOS 를 정의한다.
+#              main() 이 mainThread 를 만들어 그 안에서 hwInit/apInit/apMain 을 돈다.
+#   OFF        bare-metal. main() 이 그대로 부른다.
+#
+# 스위치를 CMake 에 두는 이유는 커널 소스 포함 여부와 매크로가 한 곳에서
+# 결정되어야 어긋나지 않기 때문이다. hw_def.h 는 _USE_HW_RTOS 가 켜졌을 때의
+# 스레드 상수만 갖는다.
+#
+#   cmake -S . -B build -DNU87_RTOS=OFF
+option(NU87_RTOS "FreeRTOS 사용" ON)
+message(STATUS "FreeRTOS: ${NU87_RTOS}")
+
+set(FREERTOS_DIR ${REALTEK_DIR}/freertos)
+
+if(NU87_RTOS)
+  # 파일 목록은 SDK 의
+  # project_hp/asdk/make/os/freertos/freertos_v10.2.0/Makefile 을 그대로 따른다.
+  # 커널은 우리 코드와 같은 -Wall 기준으로 빌드한다 (벤더 완화 플래그 미적용).
+  set(SRC_FILES_FREERTOS
+    ${FREERTOS_DIR}/Source/tasks.c
+    ${FREERTOS_DIR}/Source/list.c
+    ${FREERTOS_DIR}/Source/croutine.c
+    ${FREERTOS_DIR}/Source/queue.c
+    ${FREERTOS_DIR}/Source/timers.c
+    ${FREERTOS_DIR}/Source/event_groups.c
+    ${FREERTOS_DIR}/Source/stream_buffer.c
+    ${FREERTOS_DIR}/Source/portable/MemMang/heap_5.c
+    ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure/port.c
+    ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure/portasm.c
+  )
+else()
+  set(SRC_FILES_FREERTOS)
+  # bsp/rtos/ 는 커널 없이는 의미가 없다
+  list(FILTER SRC_FILES EXCLUDE REGEX "src/bsp/rtos/")
+endif()
 
 
 # 특정 파일을 빌드에서 제외한다.
@@ -107,6 +145,7 @@ add_executable(${EXECUTABLE}
   ${SRC_FILES}
   ${SRC_FILES_RECURSE}
   ${SRC_FILES_VENDOR}
+  ${SRC_FILES_FREERTOS}
 )
 
 
@@ -117,6 +156,7 @@ target_include_directories(${EXECUTABLE} PRIVATE
   src/ap/modules/common
   src/bsp
   src/bsp/device          # 우리 platform_autoconf.h / platform_opts.h / autoconf.h
+  src/bsp/rtos            # 우리 FreeRTOSConfig.h (SDK 예제 것이 아니다)
   src/common
   src/common/core
   src/common/hw/include
@@ -138,9 +178,18 @@ target_include_directories(${EXECUTABLE} PRIVATE
   ${REALTEK_DIR}/imgtool_floader/include
 )
 
+if(NU87_RTOS)
+  target_include_directories(${EXECUTABLE} PRIVATE
+    ${FREERTOS_DIR}/Source/include
+    ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure
+  )
+endif()
+
 
 target_compile_definitions(${EXECUTABLE} PRIVATE
   -DCONFIG_PLATFORM_8721D
+  # 명령줄로 정의해야 bsp.h 가 hw_def.h 보다 먼저 처리될 때도 값이 잡힌다.
+  $<$<BOOL:${NU87_RTOS}>:_USE_HW_RTOS>
 )
 
 
