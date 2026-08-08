@@ -48,6 +48,10 @@
 #define _USE_HW_GPIO
 #define      HW_GPIO_MAX_CH         GPIO_PIN_MAX
 
+/* 16 번부터가 사용자 채널이다. 0~15 는 Realtek 이 쓴다. */
+#define _USE_HW_IPC
+#define      HW_IPC_CH_MAX          32
+
 
 //-- CLI
 //

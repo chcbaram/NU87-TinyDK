@@ -4,20 +4,25 @@
  * 채널 1 개. LOGUART(PA7 TX / PA8 RX) 가 CP2102N 을 거쳐 USB-C 로 나간다.
  * 플래싱과 콘솔이 같은 포트를 공유한다.
  *
- * 송수신 모두 ROM 함수를 직접 호출하는 폴링 방식이다:
- *   LOGUART_PutChar / LOGUART_GetChar / LOGUART_Readable / LOGUART_WaitBusy
- * LOGUART 에 하드웨어 FIFO 가 있고 cliMain() 이 moduleUpdate() 마다 호출되므로
- * 115200 타이핑 속도에는 충분하다.
+ * RX 는 인터럽트로 받아 qbuffer 에 쌓는다. 폴링으로 두면 CLI 가 도는 사이에
+ * 하드웨어 FIFO 가 넘쳐 붙여넣기 한 문자열이 잘린다.
  *
- * 한계: 긴 텍스트를 붙여넣으면 FIFO 를 넘겨 문자가 떨어질 수 있다. 그때는
- * InterruptRegister(UART_LOG_IRQ) + qbuffer 로 바꾼다. p_driver vtable 을
- * 유지했으므로 교체 범위가 이 파일 안에 머문다.
+ * TX 는 폴링이다. fault handler 가 인터럽트를 쓸 수 없는 상태에서 레지스터를
+ * 덤프해야 한다.
  */
 
 #include "uart.h"
 
 
 #ifdef _USE_HW_UART
+#include "qbuffer.h"
+
+
+#define UART_RX_BUF_LEN     256
+
+/* RX 데이터 도착 + FIFO 가 덜 찬 채로 멈췄을 때의 타임아웃 */
+#define UART_RX_IMR         (RUART_IER_ERBI | RUART_IER_ETOI)
+
 
 typedef struct
 {
@@ -33,6 +38,12 @@ typedef struct
 static uart_tbl_t uart_tbl[UART_MAX_CH];
 static bool       is_init = false;
 
+static qbuffer_t  rx_q;
+static uint8_t    rx_buf[UART_RX_BUF_LEN];
+
+
+static uint32_t uartLogIrq(void *data);
+
 
 
 
@@ -46,6 +57,12 @@ bool uartInit(void)
     uart_tbl[i].tx_cnt   = 0;
     uart_tbl[i].p_driver = NULL;
   }
+
+  qbufferCreate(&rx_q, rx_buf, UART_RX_BUF_LEN);
+
+  InterruptRegister((IRQ_FUN)uartLogIrq, UART_LOG_IRQ, (uint32_t)NULL, 5);
+  InterruptEn(UART_LOG_IRQ, 5);
+  LOGUART_SetIMR(UART_RX_IMR);
 
   is_init = true;
   return true;
@@ -117,7 +134,7 @@ uint32_t uartAvailable(uint8_t ch)
     return uart_tbl[ch].p_driver->available();
   }
 
-  return LOGUART_Readable() ? 1 : 0;
+  return qbufferAvailable(&rx_q);
 }
 
 bool uartFlush(uint8_t ch)
@@ -129,18 +146,7 @@ bool uartFlush(uint8_t ch)
     return uart_tbl[ch].p_driver->flush();
   }
 
-  // 상대가 계속 보내면 Readable 이 내려가지 않는다. 시간으로 끊는다.
-  uint32_t pre_time = millis();
-
-  while (LOGUART_Readable())
-  {
-    LOGUART_GetChar(_FALSE);
-
-    if (millis() - pre_time >= UART_FLUSH_TIMEOUT_MS)
-    {
-      return false;
-    }
-  }
+  qbufferFlush(&rx_q);
   return true;
 }
 
@@ -153,8 +159,11 @@ uint8_t uartRead(uint8_t ch)
     return uart_tbl[ch].p_driver->read();
   }
 
+  uint8_t data = 0;
+
+  qbufferRead(&rx_q, &data, 1);
   uart_tbl[ch].rx_cnt++;
-  return LOGUART_GetChar(_FALSE);
+  return data;
 }
 
 uint32_t uartWrite(uint8_t ch, uint8_t *p_data, uint32_t length)
@@ -209,6 +218,28 @@ uint32_t uartGetTxCnt(uint8_t ch)
 {
   if (ch >= UART_MAX_CH) return 0;
   return uart_tbl[ch].tx_cnt;
+}
+
+/* ROM shell 핸들러와 같은 형태다. 처리 중에 IMR 을 내려 재진입을 막고,
+ * FIFO 가 빌 때까지 한 번에 비운다. */
+uint32_t uartLogIrq(void *data)
+{
+  uint32_t imr;
+  uint8_t  ch;
+
+  (void)data;
+
+  imr = LOGUART_GetIMR();
+  LOGUART_SetIMR(0);
+
+  while (LOGUART_Readable())
+  {
+    ch = LOGUART_GetChar(_FALSE);
+    qbufferWrite(&rx_q, &ch, 1);
+  }
+
+  LOGUART_SetIMR(imr);
+  return 0;
 }
 
 #endif

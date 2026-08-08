@@ -123,7 +123,6 @@ set(EXCLUDE_PATHS
   # FreeRTOS 필요 — 무선/OTA 단계에서 되살린다
   fwlib/ram_hp/rtl8721dhp_sd.c            # pvPortMalloc / vPortFree
   fwlib/ram_hp/rtl8721dhp_simulation.c    # xTaskCreate / vTaskDelay
-  fwlib/ram_common/rtl8721d_flash_ram.c   # xTaskGetSchedulerState — OTA 단계에서 필요
   fwlib/ram_common/rtl8721d_gdma_ram.c    # osdep_service.h
 
   # 아직 RTL 용으로 작성하지 않은 우리 드라이버 (hw_def.h 에서 스위치도 꺼 두었다)
@@ -184,16 +183,6 @@ if(NU87_RTOS)
     ${FREERTOS_DIR}/Source/include
     ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure
   )
-
-  # ipc_api.c 는 vTaskStackAddr/vTaskStackSize 를 쓰면서 선언을 include 하지 않는다.
-  # 벤더 파일을 고치는 대신 이 파일에만 헤더를 강제로 넣는다.
-  # freertos_backtrace_ext.h 가 tskKERNEL_VERSION_MAJOR 로 자기 선언을 감싸므로
-  # FreeRTOS.h -> task.h 를 먼저 넣어야 선언이 살아난다.
-  set_source_files_properties(
-    ${REALTEK_DIR}/fwlib/ram_common/rtl8721d_ipc_api.c
-    PROPERTIES COMPILE_OPTIONS
-      "${NU87_VENDOR_RELAX_FLAGS};-include;FreeRTOS.h;-include;task.h;-include;freertos_backtrace_ext.h"
-  )
 endif()
 
 
@@ -228,6 +217,20 @@ if(SRC_FILES_VENDOR)
   set_source_files_properties(
     ${SRC_FILES_VENDOR}
     PROPERTIES COMPILE_OPTIONS "${NU87_VENDOR_RELAX_FLAGS}"
+  )
+endif()
+
+# 아래 벤더 파일들은 FreeRTOS API 를 쓰면서 헤더를 include 하지 않는다.
+# 벤더 소스를 고치면 SDK 재동기화 때마다 되살아나므로 강제 include 로 해결한다.
+# freertos_backtrace_ext.h 가 tskKERNEL_VERSION_MAJOR 로 자기 선언을 감싸므로
+# FreeRTOS.h -> task.h 를 먼저 넣어야 선언이 살아난다.
+# ★ 위의 일반 벤더 설정보다 뒤여야 한다. 나중 호출이 앞의 것을 덮어쓴다.
+if(NU87_RTOS)
+  set_source_files_properties(
+    ${REALTEK_DIR}/fwlib/ram_common/rtl8721d_ipc_api.c        # vTaskStackAddr / vTaskStackSize
+    ${REALTEK_DIR}/fwlib/ram_common/rtl8721d_flash_ram.c      # xTaskGetSchedulerState / xTaskIncrementTick
+    PROPERTIES COMPILE_OPTIONS
+      "${NU87_VENDOR_RELAX_FLAGS};-include;FreeRTOS.h;-include;task.h;-include;freertos_backtrace_ext.h"
   )
 endif()
 

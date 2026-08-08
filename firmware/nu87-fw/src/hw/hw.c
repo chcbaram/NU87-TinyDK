@@ -54,6 +54,7 @@ bool hwInit(void)
 
   resetInit();
   gpioInit();
+  ipcInit();
 
   logBoot(false);
 

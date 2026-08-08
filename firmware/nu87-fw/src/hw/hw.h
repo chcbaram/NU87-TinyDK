@@ -11,6 +11,7 @@ extern "C" {
 #include "osal/thread.h"
 #include "led.h"
 #include "gpio.h"
+#include "ipc.h"
 #include "reset.h"
 #include "uart.h"
 #include "cli.h"
