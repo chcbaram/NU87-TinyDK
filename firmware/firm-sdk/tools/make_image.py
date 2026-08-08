@@ -59,18 +59,47 @@ KM0_PAD_ALIGN = 0x1000
 # KM4 애플리케이션 SRAM 시작. ram 파트가 여기로 복사된다.
 BD_RAM_NS_BASE = 0x10005000
 
-# KM4 XIP 가상주소. 빈 xip 파트의 로드 주소로 쓴다 (32바이트 헤더 다음).
+# KM4 XIP 가상주소. 32바이트 헤더 다음이 코드 시작이다.
+# 리전은 0x0E000000 부터 SRAM 시작(0x10000000) 전까지다. SRAM 주소가 숫자상
+# 더 크므로 하한 비교만으로는 배치를 구분할 수 없다.
 KM4_XIP_BASE = 0x0E000020
+KM4_XIP_REGION = range(0x0E000000, 0x10000000)
+
+# 길이 0 인 psram 파트의 로드 주소. 공장 이미지가 쓰는 값 그대로다.
+KM4_PSRAM_BASE = 0x02000020
 BD_RAM_NS_SIZE = 0x1007C000 - 0x10005000        # 476K
 
-# 추출할 섹션. 링커스크립트에서 __ram_image2_text_start__ ~ __ram_image2_text_end__
-# 사이에 놓인 것들이다. .bss 는 로드하지 않는다 (app_start 가 0 으로 채운다).
-RAM_SECTIONS = [
+# 추출할 섹션.
+#
+# RAM 파트 — __ram_image2_text_start__ ~ __ram_image2_text_end__ 사이.
+#   부트로더가 이 범위만 SRAM 으로 복사한다.
+#   .bss 는 로드하지 않는다 (app_start 가 0 으로 채운다).
+#
+# XIP 파트 — __flash_text_start__ 부터. 복사되지 않고 플래시에서 실행된다.
+#
+# 배치는 .map 의 __flash_text_start__ 값으로 판별한다. XIP 배치에서만 이 심볼이
+# 0x0E000000 대에 있고, 전량 SRAM 배치에서는 SRAM 주소다.
+#
+# .ARM.extab / .ARM.exidx 는 배치에 따라 소속이 달라진다. 전량 SRAM 에서는
+# RAM 범위 안에, XIP 에서는 플래시 쪽에 놓이므로 목록을 나눠 둔다.
+RAM_SECTIONS_SRAM = [
     ".ram_image2.entry",
     ".ram_image2.text",
     ".ARM.extab",
     ".ARM.exidx",
     ".ram_image2.data",
+]
+
+RAM_SECTIONS_XIP = [
+    ".ram_image2.entry",
+    ".ram_image2.text",
+    ".ram_image2.data",
+]
+
+XIP_SECTIONS = [
+    ".xip_image2.text",
+    ".ARM.extab",
+    ".ARM.exidx",
 ]
 
 
@@ -110,6 +139,28 @@ def read_firm_ver(payload: bytes):
     return {"version": ver, "name": name, "addr": addr}
 
 
+def km0_ls_size(km0: bytes):
+    """
+    KM0 부트로더가 계산하는 LsSize 를 그대로 재현한다 (boot_flash_lp.c):
+
+        ImgSize = Img2Hdr->image_size + Img2DataHdr->image_size + IMAGE_HEADER_LEN * 2;
+        ImgSize = (((ImgSize - 1) >> 12) + 1) << 12;      /* 4KB 정렬 */
+
+    KM4 파트가 놓여야 하는 오프셋이기도 하다. 헤더가 이상하면 None.
+    """
+    if len(km0) < HDR_LEN * 2:
+        return None
+    if km0[0:8] != SIG_IMG2:
+        return None
+    size1, = struct.unpack_from("<I", km0, 8)
+    off2 = HDR_LEN + size1
+    if off2 + HDR_LEN > len(km0) or km0[off2:off2 + 8] != SIG_IMG2:
+        return None
+    size2, = struct.unpack_from("<I", km0, off2 + 8)
+    raw = size1 + size2 + HDR_LEN * 2
+    return (((raw - 1) >> 12) + 1) << 12
+
+
 def prepend_header(data: bytes, load_addr: int) -> bytes:
     hdr = SIG_IMG2 + struct.pack("<II", len(data), load_addr) + b"\xff" * 16
     assert len(hdr) == HDR_LEN
@@ -140,25 +191,52 @@ def main():
         sys.exit("__ram_image2_text_start__ 를 .map 에서 찾을 수 없다.\n"
                  "  링커스크립트가 이 심볼을 정의하는지 확인할 것")
 
+    # ── 배치 판별 ─────────────────────────────────────────────────────
+    flash_addr = read_map_symbol(mapf, "__flash_text_start__")
+    is_xip = flash_addr is not None and flash_addr in KM4_XIP_REGION
+
+    def extract(sections, name):
+        out = outdir / name
+        cmd = [args.objcopy]
+        for s in sections:
+            cmd += ["-j", s]
+        cmd += ["-O", "binary", str(elf), str(out)]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"objcopy 실패:\n{r.stderr}")
+        return out.read_bytes()
+
     # ── 섹션 추출 ─────────────────────────────────────────────────────
-    ram_bin = outdir / "ram_2.bin"
-    cmd = [args.objcopy]
-    for s in RAM_SECTIONS:
-        cmd += ["-j", s]
-    cmd += ["-O", "binary", str(elf), str(ram_bin)]
+    if is_xip:
+        payload = extract(RAM_SECTIONS_XIP, "ram_2.bin")
+        xip_payload = extract(XIP_SECTIONS, "xip_2.bin")
+        xip_addr = flash_addr
+        if len(xip_payload) == 0:
+            sys.exit("XIP 배치인데 .xip_image2.text 가 비어 있다. 링커스크립트를 확인할 것")
+    else:
+        payload = extract(RAM_SECTIONS_SRAM, "ram_2.bin")
+        xip_payload = b""
+        xip_addr = KM4_XIP_BASE
 
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"objcopy 실패:\n{r.stderr}")
-
-    payload = ram_bin.read_bytes()
     if len(payload) == 0:
         sys.exit("추출된 이미지가 비어 있다. 링커스크립트의 섹션 이름을 확인할 것")
 
     # ── 헤더 부착 ─────────────────────────────────────────────────────
-    # part1: 빈 xip 파트. 부트로더가 part2 헤더 위치를 이 크기로 계산한다.
+    # part1: xip 파트. 플래시에 남아 XIP 로 실행된다.
+    #        전량 SRAM 배치에서는 길이 0 이다. 그래도 있어야 부트로더가 part2
+    #        헤더 위치를 제대로 계산한다.
     # part2: ram 파트. 부트로더가 이것만 image_addr 로 복사한다.
-    km4 = prepend_header(b"", KM4_XIP_BASE) + prepend_header(payload, load_addr)
+    # part3: 길이 0 인 psram 파트.
+    #        KM0 부트로더(boot_flash_lp.c BOOT_FLASH_OTA_MMU)가 KM4 이미지에 한해
+    #        part2 다음에서 psram 헤더를 읽어 MMU 매핑 크기에 더한다:
+    #            PsramHdr = (IMAGE_HEADER *)(vAddr + ImgSize);
+    #            ImgSize += (IMAGE_HEADER_LEN + PsramHdr->image_size);
+    #        이 파트가 없으면 빈 플래시(0xFF)를 헤더로 읽어 image_size 가
+    #        0xFFFFFFFF 가 된다. u32 오버플로 덕에 결과적으로 한 페이지 더 크게
+    #        잡혀 동작은 하지만 의도한 동작이 아니다. 공장 이미지도 이 파트를 갖는다.
+    km4 = (prepend_header(xip_payload, xip_addr)
+           + prepend_header(payload, load_addr)
+           + prepend_header(b"", KM4_PSRAM_BASE))
     km4_path = outdir / "km4_image2_all.bin"
     km4_path.write_bytes(km4)
 
@@ -169,9 +247,22 @@ def main():
                  f"  extract_blobs.py 로 공장 플래시 덤프에서 추출할 것")
 
     km0 = km0_path.read_bytes()
-    if len(km0) % KM0_PAD_ALIGN != 0:
-        print(f"  [!] km0_image2_all.bin 이 4KB 경계가 아니다 ({len(km0)} B). "
-              f"부트로더가 헤더 체인을 못 따라갈 수 있다")
+
+    # KM0 블롭 길이는 부트로더가 계산하는 값과 정확히 같아야 한다.
+    #
+    # KM0 부트로더는 KM0 이미지의 두 파트 헤더에서 크기를 더해 4KB 로 올린 값
+    # (LsSize)을 구하고, KM4 파트가 OTA_Region + LsSize 에 있다고 가정해
+    # MMU 를 건다. 파일 길이가 이 값과 다르면 KM4 파트가 엉뚱한 자리에 놓여
+    # "AmebaD Flash Memory Layout is modified!" 를 출력하며 무한 대기한다.
+    ls_size = km0_ls_size(km0)
+    if ls_size is None:
+        print("  [!] km0_image2_all.bin 의 파트 헤더를 읽을 수 없다. 시그니처를 확인할 것")
+    elif len(km0) != ls_size:
+        sys.exit(f"km0_image2_all.bin 길이가 맞지 않다.\n"
+                 f"  파일        {len(km0)} B\n"
+                 f"  부트로더 계산 {ls_size} B  (파트 크기 합을 4KB 로 올림)\n"
+                 f"  이대로 구우면 KM4 파트를 찾지 못해 부팅하지 않는다.\n"
+                 f"  extract_blobs.py 의 pad_align 을 확인할 것")
 
     combined = km0 + km4
     comb_path = outdir / "km0_km4_image2.bin"
@@ -189,7 +280,9 @@ def main():
         print(f"  펌웨어      {fv['name']}  {fv['version']}   "
               f"(페이로드 +{VERSION_OFFSET}, addr 0x{fv['addr']:08X})")
 
-    print(f"  part1 xip   {0:7d} B  load 0x{KM4_XIP_BASE:08X}  (빈 파트)")
+    print(f"  배치        {'XIP (코드는 플래시에서 실행)' if is_xip else 'SRAM (전량 SRAM)'}")
+    print(f"  part1 xip   {len(xip_payload):7d} B  load 0x{xip_addr:08X}"
+          f"{'  (__flash_text_start__)' if is_xip else '  (빈 파트)'}")
     print(f"  part2 ram   {used:7d} B  load 0x{load_addr:08X}  (__ram_image2_text_start__)")
     print(f"  km4_image2  {len(km4):7d} B  sha256:{hashlib.sha256(km4).hexdigest()[:16]}")
     print(f"  km0(스톡)   {len(km0):7d} B")
