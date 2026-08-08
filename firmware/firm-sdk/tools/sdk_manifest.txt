@@ -117,6 +117,25 @@ project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/ld/rlx8721d_img3_
 project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/ld/rlx8721d_rom_symbol_acut_boot.ld   -> ld/rlx8721d_rom_symbol_acut_boot.ld
 project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/ld/rlx8721d_rom_symbol_acut_s.ld      -> ld/rlx8721d_rom_symbol_acut_s.ld
 
+# ── FreeRTOS v10.2.0 (KM4 / non-secure 포트) ──────────────────────────────
+# 파일 목록 근거: project_hp/asdk/make/os/freertos/freertos_v10.2.0/Makefile
+#   커널      tasks list croutine queue timers event_groups stream_buffer
+#   포트      Source/portable/GCC/RTL8721D_HP/non_secure  (ARMv8-M 비보안)
+#   힙        heap_5 — 여러 구간을 등록할 수 있어 SRAM 이 흩어져 있는 이 칩에 맞다
+component/os/freertos/freertos_v10.2.0/Source/tasks.c                 -> freertos/Source/tasks.c
+component/os/freertos/freertos_v10.2.0/Source/list.c                  -> freertos/Source/list.c
+component/os/freertos/freertos_v10.2.0/Source/croutine.c              -> freertos/Source/croutine.c
+component/os/freertos/freertos_v10.2.0/Source/queue.c                 -> freertos/Source/queue.c
+component/os/freertos/freertos_v10.2.0/Source/timers.c                -> freertos/Source/timers.c
+component/os/freertos/freertos_v10.2.0/Source/event_groups.c          -> freertos/Source/event_groups.c
+component/os/freertos/freertos_v10.2.0/Source/stream_buffer.c         -> freertos/Source/stream_buffer.c
+component/os/freertos/freertos_v10.2.0/Source/portable/MemMang/heap_5.c -> freertos/Source/portable/MemMang/heap_5.c
+component/os/freertos/freertos_v10.2.0/Source/portable/GCC/RTL8721D_HP/non_secure/ -> freertos/Source/portable/GCC/RTL8721D_HP/non_secure/
+component/os/freertos/freertos_v10.2.0/Source/include/                -> freertos/Source/include/
+
+# SDK 예제의 FreeRTOSConfig.h — 참조용. 실제로 쓰는 것은 src/bsp/device/ 의 우리 버전이다.
+project/realtek_amebaD_va0_example/inc/inc_hp/FreeRTOSConfig.h        -> freertos/FreeRTOSConfig.h.ref
+
 # ══════════════════════════════════════════════════════════════════════════
 #  참고: CMakeLists.txt EXCLUDE_PATHS 에 넣어야 하는 파일들
 # ══════════════════════════════════════════════════════════════════════════
