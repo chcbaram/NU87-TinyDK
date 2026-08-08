@@ -269,7 +269,7 @@ def erase_block(ser, addr, size):
            off & 0xFF, (off >> 8) & 0xFF, (off >> 16) & 0xFF,
            n & 0xFF, (n >> 8) & 0xFF]
     # 섹터 소거는 섹터당 수십~수백 ms 걸린다. 넉넉히 기다린다.
-    send_cmd(ser, cmd, timeout=max(20.0, n * 0.5))
+    send_cmd(ser, cmd, timeout=max(120.0, n * 2.0))
 
 
 def file_checksum(data):
@@ -341,11 +341,10 @@ def program(port, images, baud, verify, verbose):
         wait_sync(ser, 2)
         print("  진입 확인 (0x15)")
 
-        # 0x07 은 보레이트를 바꾸지 않아도 반드시 보낸다. 핸드셰이크 완료 신호이고,
-        # 이것 없이 데이터 프레임을 보내면 장치가 0x06 대신 잡값으로 응답한다.
-        # 보레이트 상향은 소거가 끝난 뒤 대용량 전송 직전에만 한다.
-        print("  핸드셰이크 (0x07)")
-        set_max_speed(ser, HANDSHAKE_BAUD)
+        # 0x05/0x07 핸드셰이크. 0x07 은 보레이트를 바꾸지 않아도 반드시 보낸다.
+        # 이것 없이 데이터 프레임을 보내면 0x06 대신 잡값이 온다.
+        print(f"  보레이트 {baud} 로 전환")
+        set_max_speed(ser, baud)
 
         write_block(ser, 1, FLASHLOADER_ADDR, loader, "플래시로더 -> RAM")
         send_cmd(ser, [0x04])                    # 로더 실행
