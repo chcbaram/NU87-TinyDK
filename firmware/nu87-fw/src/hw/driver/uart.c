@@ -16,6 +16,7 @@
 
 #ifdef _USE_HW_UART
 #include "qbuffer.h"
+#include "cli.h"
 
 
 #define UART_RX_BUF_LEN     256
@@ -35,6 +36,11 @@ typedef struct
 } uart_tbl_t;
 
 
+static const char *uart_name[UART_MAX_CH] =
+{
+  "LOGUART  PA7/PA8",
+};
+
 static uart_tbl_t uart_tbl[UART_MAX_CH];
 static bool       is_init = false;
 
@@ -43,6 +49,10 @@ static uint8_t    rx_buf[UART_RX_BUF_LEN];
 
 
 static uint32_t uartLogIrq(void *data);
+
+#ifdef _USE_HW_CLI
+static void cliUart(cli_args_t *args);
+#endif
 
 
 
@@ -63,6 +73,10 @@ bool uartInit(void)
   InterruptRegister((IRQ_FUN)uartLogIrq, UART_LOG_IRQ, (uint32_t)NULL, 5);
   InterruptEn(UART_LOG_IRQ, 5);
   LOGUART_SetIMR(UART_RX_IMR);
+
+#ifdef _USE_HW_CLI
+  cliAdd("uart", cliUart);
+#endif
 
   is_init = true;
   return true;
@@ -241,5 +255,58 @@ uint32_t uartLogIrq(void *data)
   LOGUART_SetIMR(imr);
   return 0;
 }
+
+
+#ifdef _USE_HW_CLI
+void cliUart(cli_args_t *args)
+{
+  bool ret = false;
+
+
+  if (args->argc == 1 && args->isStr(0, "info"))
+  {
+    for (int i = 0; i < UART_MAX_CH; i++)
+    {
+      cliPrintf("_DEF_UART%d : %s, %d bps%s\n",
+                i + 1,
+                uart_name[i],
+                (int)uartGetBaud(i),
+                (i == cliGetPort()) ? "  <- cli" : "");
+      cliPrintf("             rx %d, tx %d bytes, rx queue %d/%d\n",
+                (int)uartGetRxCnt(i), (int)uartGetTxCnt(i),
+                (int)qbufferAvailable(&rx_q), UART_RX_BUF_LEN);
+    }
+    ret = true;
+  }
+
+  /* 수신 바이트를 16진으로 계속 찍는다. q 로 빠져나온다. */
+  if (args->argc == 2 && args->isStr(0, "test"))
+  {
+    uint8_t ch = constrain(args->getData(1), 1, UART_MAX_CH) - 1;
+
+    if (ch == cliGetPort())
+    {
+      cliPrintf("cli 가 쓰는 포트다\n");
+    }
+    else
+    {
+      while (cliKeepLoop())
+      {
+        if (uartAvailable(ch) > 0)
+        {
+          cliPrintf("<- _DEF_UART%d : 0x%02X\n", ch + 1, uartRead(ch));
+        }
+      }
+    }
+    ret = true;
+  }
+
+  if (ret == false)
+  {
+    cliPrintf("uart info\n");
+    cliPrintf("uart test ch[1~%d]\n", UART_MAX_CH);
+  }
+}
+#endif
 
 #endif
