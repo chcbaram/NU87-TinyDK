@@ -17,7 +17,28 @@ KM4 이미지 생성 — 링크 결과를 부팅 가능한 이미지로 만든�
   0x0C  4  로드 주소 (LE)
   0x10 16  예약 (0xFF)
 
-1단계는 전량 SRAM 배치라 파트가 하나뿐이다 (원본은 xip/ram/psram 3파트).
+KM4 이미지는 반드시 2 파트여야 한다.
+KM4 부트로더(bootloader/boot_flash_hp.c)가 이렇게 파싱하기 때문이다:
+
+    img2_hdr           = __flash_text_start__ - 32          ← part1(xip) 헤더
+    FlashImage2DataHdr = __flash_text_start__ + img2_hdr->image_size
+                                                             ← part2(ram) 헤더
+    _memcpy(FlashImage2DataHdr->image_addr,
+            FlashImage2DataHdr + 1,
+            FlashImage2DataHdr->image_size);                 ← 이것만 RAM 으로 복사한다
+
+즉 part1 은 플래시에 남아 XIP 로 실행되고, part2 만 RAM 으로 복사된다.
+우리는 전량 SRAM 배치라 XIP 코드가 없지만, 파트를 하나만 넣으면 부트로더가
+그것을 part1 로 보고 part2 를 엉뚱한 곳에서 찾아 IMG2 ADDR Invalid 로 실패한다.
+
+그래서 길이 0 인 xip 파트를 앞에 두고 우리 페이로드를 ram 파트로 넣는다:
+
+    [header: sig, size=0, load=0x0E000020]   ← part1 xip (빈 파트)
+    [header: sig, size=N, load=0x10005000]   ← part2 ram
+    [payload N bytes]
+
+공장 이미지의 KM4 IMG1 도 같은 형태다 (xip_boot len=0 + ram 파트).
+
 로드 주소는 .map 의 __ram_image2_text_start__ 에서 읽는다.
 """
 
@@ -35,8 +56,11 @@ HDR_LEN = 32
 # km0_image2_all.bin 은 4KB 경계로 패딩된 상태여야 한다.
 KM0_PAD_ALIGN = 0x1000
 
-# KM4 애플리케이션 SRAM 시작. 이미지가 여기로 로드된다.
+# KM4 애플리케이션 SRAM 시작. ram 파트가 여기로 복사된다.
 BD_RAM_NS_BASE = 0x10005000
+
+# KM4 XIP 가상주소. 빈 xip 파트의 로드 주소로 쓴다 (32바이트 헤더 다음).
+KM4_XIP_BASE = 0x0E000020
 BD_RAM_NS_SIZE = 0x1007C000 - 0x10005000        # 476K
 
 # 추출할 섹션. 링커스크립트에서 __ram_image2_text_start__ ~ __ram_image2_text_end__
@@ -132,7 +156,9 @@ def main():
         sys.exit("추출된 이미지가 비어 있다. 링커스크립트의 섹션 이름을 확인할 것")
 
     # ── 헤더 부착 ─────────────────────────────────────────────────────
-    km4 = prepend_header(payload, load_addr)
+    # part1: 빈 xip 파트. 부트로더가 part2 헤더 위치를 이 크기로 계산한다.
+    # part2: ram 파트. 부트로더가 이것만 image_addr 로 복사한다.
+    km4 = prepend_header(b"", KM4_XIP_BASE) + prepend_header(payload, load_addr)
     km4_path = outdir / "km4_image2_all.bin"
     km4_path.write_bytes(km4)
 
@@ -163,8 +189,8 @@ def main():
         print(f"  펌웨어      {fv['name']}  {fv['version']}   "
               f"(페이로드 +{VERSION_OFFSET}, addr 0x{fv['addr']:08X})")
 
-    print(f"  로드 주소   0x{load_addr:08X}  (__ram_image2_text_start__)")
-    print(f"  ram_2.bin   {used:7d} B")
+    print(f"  part1 xip   {0:7d} B  load 0x{KM4_XIP_BASE:08X}  (빈 파트)")
+    print(f"  part2 ram   {used:7d} B  load 0x{load_addr:08X}  (__ram_image2_text_start__)")
     print(f"  km4_image2  {len(km4):7d} B  sha256:{hashlib.sha256(km4).hexdigest()[:16]}")
     print(f"  km0(스톡)   {len(km0):7d} B")
     print(f"  최종 이미지 {len(combined):7d} B  -> {comb_path.name}  (flash 0x08006000)")
