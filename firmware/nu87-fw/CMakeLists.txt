@@ -172,11 +172,35 @@ if(SRC_FILES_VENDOR)
 endif()
 
 
+# ── 이미지 배치 선택 ────────────────────────────────────────────────────────
+#   xip   (기본) 코드·상수를 플래시에서 실행한다. 무선 라이브러리와 OTA 슬롯의
+#         전제이고, SRAM 을 버퍼용으로 통째로 남긴다.
+#   sram  코드·상수까지 전부 SRAM. GDB load 로 바로 올릴 수 있고 SW 브레이크포인트가
+#         되므로 반복 개발이 빠르다. 다만 476KB 를 넘길 수 없다.
+#
+# ★ sram 배치에서만 되는 것 — 아래를 쓰려면 -DNU87_LAYOUT=sram 으로 재구성한다.
+#     load-sram 태스크 / "Load to SRAM & Run KM4" 디버그 구성
+#     소프트웨어 브레이크포인트 (xip 는 하드웨어 BP 2개뿐)
+#   xip 배치에서 GDB load 는 실패한다. OpenOCD 에 RTL872x 플래시 드라이버가
+#   없어서 XIP 영역 쓰기가 D-캐시만 오염시키고 타깃이 불안정해진다.
+#   xip 는 flash.py(UART)로 굽는다.
+set(NU87_LAYOUT "xip" CACHE STRING "이미지 배치: xip | sram")
+set_property(CACHE NU87_LAYOUT PROPERTY STRINGS xip sram)
+
+if(NU87_LAYOUT STREQUAL "xip")
+  set(NU87_LDSCRIPT_IMG ${CMAKE_CURRENT_SOURCE_DIR}/src/bsp/ldscript/nu87_km4_img2_xip.ld)
+elseif(NU87_LAYOUT STREQUAL "sram")
+  set(NU87_LDSCRIPT_IMG ${CMAKE_CURRENT_SOURCE_DIR}/src/bsp/ldscript/nu87_km4_img2.ld)
+else()
+  message(FATAL_ERROR "NU87_LAYOUT 은 sram 또는 xip 여야 합니다: ${NU87_LAYOUT}")
+endif()
+message(STATUS "이미지 배치: ${NU87_LAYOUT}")
+
+
 target_link_options(${EXECUTABLE} PRIVATE
   ${NU87_ARCH_FLAGS}
 
-  # 우리 이미지 배치 (전량 SRAM)
-  -T${CMAKE_CURRENT_SOURCE_DIR}/src/bsp/ldscript/nu87_km4_img2.ld
+  -T${NU87_LDSCRIPT_IMG}
   # 칩 마스크 ROM 심볼. "symbol = 0xADDR;" 나열일 뿐인 평문이다.
   -T${REALTEK_DIR}/ld/rlx8721d_rom_symbol_acut.ld
 
@@ -195,8 +219,12 @@ target_link_options(${EXECUTABLE} PRIVATE
 
 # 링커스크립트가 바뀌면 다시 링크한다.
 set(NU87_LDSCRIPTS
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/bsp/ldscript/nu87_km4_img2.ld
+  ${NU87_LDSCRIPT_IMG}
   ${REALTEK_DIR}/ld/rlx8721d_rom_symbol_acut.ld
+  # 이미지 생성기와 KM0 블롭이 바뀌어도 이미지를 다시 만들어야 한다.
+  # POST_BUILD 는 링크에 매달려 있어 링크가 안 걸리면 실행되지 않는다.
+  ${FIRM_SDK_DIR}/tools/make_image.py
+  ${FIRM_SDK_DIR}/prebuilt/km0_image2_all.bin
 )
 set_target_properties(${EXECUTABLE} PROPERTIES LINK_DEPENDS "${NU87_LDSCRIPTS}")
 

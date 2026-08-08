@@ -24,7 +24,10 @@
       "breakAfterReset": false
     },
     {
-      "name": "Load to SRAM & Run KM4",
+      // ★ -DNU87_LAYOUT=sram 으로 구성했을 때만 동작한다.
+      // 기본 xip 배치에서는 코드가 플래시에 있어 load 가 실패하고 타깃이 불안정해진다
+      // (OpenOCD 에 RTL872x 플래시 드라이버가 없다). xip 는 flash 태스크로 굽는다.
+      "name": "Load to SRAM & Run KM4  (NU87_LAYOUT=sram 전용)",
       "cwd": "${workspaceFolder}",
       "executable": "./build/nu87-fw.elf",
       "request": "launch",

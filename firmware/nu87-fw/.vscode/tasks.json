@@ -99,7 +99,7 @@
     {
       "label": "flash-load-sram",
       "type": "shell",
-      "detail": "SWD 로 SRAM 에 올려 실행 · 플래시를 건드리지 않는 반복 개발용",
+      "detail": "SWD 로 SRAM 에 올려 실행 · ★ -DNU87_LAYOUT=sram 으로 구성했을 때만 동작",
       "dependsOn": "build-build",
       "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'targets rtl872xd.km4' -c halt -c 'load_image build/nu87-fw.elf' -c 'reg msp 0x10005000' -c 'nu87_run_image' -c resume -c shutdown",
       "problemMatcher": []
