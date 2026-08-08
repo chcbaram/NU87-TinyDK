@@ -84,6 +84,7 @@ if(NU87_RTOS)
     ${FREERTOS_DIR}/Source/portable/MemMang/heap_5.c
     ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure/port.c
     ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure/portasm.c
+    ${FREERTOS_DIR}/freertos_backtrace_ext.c
   )
 else()
   set(SRC_FILES_FREERTOS)
@@ -123,7 +124,6 @@ set(EXCLUDE_PATHS
   fwlib/ram_hp/rtl8721dhp_sd.c            # pvPortMalloc / vPortFree
   fwlib/ram_hp/rtl8721dhp_simulation.c    # xTaskCreate / vTaskDelay
   fwlib/ram_common/rtl8721d_flash_ram.c   # xTaskGetSchedulerState — OTA 단계에서 필요
-  fwlib/ram_common/rtl8721d_ipc_api.c     # vTaskStackAddr — 무선 단계에서 필수
   fwlib/ram_common/rtl8721d_gdma_ram.c    # osdep_service.h
 
   # 아직 RTL 용으로 작성하지 않은 우리 드라이버 (hw_def.h 에서 스위치도 꺼 두었다)
@@ -180,8 +180,19 @@ target_include_directories(${EXECUTABLE} PRIVATE
 
 if(NU87_RTOS)
   target_include_directories(${EXECUTABLE} PRIVATE
+    ${FREERTOS_DIR}
     ${FREERTOS_DIR}/Source/include
     ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure
+  )
+
+  # ipc_api.c 는 vTaskStackAddr/vTaskStackSize 를 쓰면서 선언을 include 하지 않는다.
+  # 벤더 파일을 고치는 대신 이 파일에만 헤더를 강제로 넣는다.
+  # freertos_backtrace_ext.h 가 tskKERNEL_VERSION_MAJOR 로 자기 선언을 감싸므로
+  # FreeRTOS.h -> task.h 를 먼저 넣어야 선언이 살아난다.
+  set_source_files_properties(
+    ${REALTEK_DIR}/fwlib/ram_common/rtl8721d_ipc_api.c
+    PROPERTIES COMPILE_OPTIONS
+      "${NU87_VENDOR_RELAX_FLAGS};-include;FreeRTOS.h;-include;task.h;-include;freertos_backtrace_ext.h"
   )
 endif()
 

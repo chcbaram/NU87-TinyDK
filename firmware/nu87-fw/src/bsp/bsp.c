@@ -103,6 +103,13 @@ uint32_t micros(void)
   return (m0 * 1000U) + u0;
 }
 
+#ifdef _USE_HW_RTOS
+uint32_t bspGetRunTimeCounter(void)
+{
+  return micros() >> 4;
+}
+#endif
+
 void delayUs(uint32_t delay_us)
 {
   /* ROM 의 캘리브레이션된 busy-wait */

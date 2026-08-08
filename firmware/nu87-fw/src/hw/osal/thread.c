@@ -27,7 +27,11 @@ typedef struct
 } thread_info_t;
 
 
+#define CPU_USAGE_WINDOW_MS   1000
+
+
 static void cliThread(cli_args_t *args);
+static void cliShowCpuUsage(void);
 
 static bool is_begin = false;
 
@@ -182,11 +186,80 @@ void cliThread(cli_args_t *args)
     ret = true;
   }
 
+  if (args->argc == 1 && args->isStr(0, "cpu"))
+  {
+    cliShowCpuUsage();
+    ret = true;
+  }
+
   if (ret == false)
   {
     cliPrintf("thread info\n");
     cliPrintf("thread task\n");
+    cliPrintf("thread cpu\n");
   }
+}
+
+/*
+ * 두 스냅샷의 런타임 카운터 차이로 구간 점유율을 낸다.
+ * vTaskGetRunTimeStats() 는 부팅 이후 누적이라 방금 무엇이 CPU 를 먹는지 알 수 없다.
+ */
+void cliShowCpuUsage(void)
+{
+  TaskStatus_t *p_pre;
+  TaskStatus_t *p_cur;
+  uint32_t pre_cnt;
+  uint32_t cur_cnt;
+  uint32_t task_cnt;
+  uint32_t total;
+
+  task_cnt = uxTaskGetNumberOfTasks();
+
+  p_pre = (TaskStatus_t *)pvPortMalloc(task_cnt * sizeof(TaskStatus_t));
+  p_cur = (TaskStatus_t *)pvPortMalloc(task_cnt * sizeof(TaskStatus_t));
+  if (p_pre == NULL || p_cur == NULL)
+  {
+    cliPrintf("pvPortMalloc fail\n");
+    vPortFree(p_pre);
+    vPortFree(p_cur);
+    return;
+  }
+
+  task_cnt = uxTaskGetSystemState(p_pre, task_cnt, &pre_cnt);
+  delay(CPU_USAGE_WINDOW_MS);
+  uxTaskGetSystemState(p_cur, task_cnt, &cur_cnt);
+
+  total = cur_cnt - pre_cnt;
+  if (total == 0)
+  {
+    cliPrintf("run time counter not running\n");
+  }
+  else
+  {
+    cliPrintf("%-16s %6s %5s\n", "Task Name", "Prio", "CPU");
+    for (uint32_t i = 0; i < task_cnt; i++)
+    {
+      uint32_t used = 0;
+
+      for (uint32_t j = 0; j < task_cnt; j++)
+      {
+        if (p_cur[j].xTaskNumber == p_pre[i].xTaskNumber)
+        {
+          used = p_cur[j].ulRunTimeCounter - p_pre[i].ulRunTimeCounter;
+          break;
+        }
+      }
+
+      cliPrintf("%-16s %6d %4d.%d %%\n",
+                p_pre[i].pcTaskName,
+                (int)p_pre[i].uxCurrentPriority,
+                (int)(used * 100 / total),
+                (int)(used * 1000 / total % 10));
+    }
+  }
+
+  vPortFree(p_pre);
+  vPortFree(p_cur);
 }
 
 

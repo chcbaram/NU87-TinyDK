@@ -133,6 +133,11 @@ component/os/freertos/freertos_v10.2.0/Source/portable/MemMang/heap_5.c -> freer
 component/os/freertos/freertos_v10.2.0/Source/portable/GCC/RTL8721D_HP/non_secure/ -> freertos/Source/portable/GCC/RTL8721D_HP/non_secure/
 component/os/freertos/freertos_v10.2.0/Source/include/                -> freertos/Source/include/
 
+# vTaskStackAddr / vTaskStackSize — IPC 가 메시지 버퍼가 스택에 있는지 검사할 때 쓴다.
+# TCB 앞부분을 복제한 MinTCB_t 로 읽으므로 커널 버전이 바뀌면 함께 확인해야 한다.
+component/os/freertos/freertos_backtrace_ext.c                        -> freertos/freertos_backtrace_ext.c
+component/os/freertos/freertos_backtrace_ext.h                        -> freertos/freertos_backtrace_ext.h
+
 # SDK 예제의 FreeRTOSConfig.h — 참조용. 실제로 쓰는 것은 src/bsp/device/ 의 우리 버전이다.
 project/realtek_amebaD_va0_example/inc/inc_hp/FreeRTOSConfig.h        -> freertos/FreeRTOSConfig.h.ref
 

@@ -60,10 +60,16 @@ extern uint32_t SystemCoreClock;
  * 필요하다. 그 구현은 KM0 와 IPC 로 물린 PMU 코드에 있어 무선 단계에서 들어온다. */
 #define configUSE_TICKLESS_IDLE                     0
 
-/* 켜려면 전용 고속 타이머가 필요한데 TIM4 는 bsp 가 쓰고 있다. */
-#define configGENERATE_RUN_TIME_STATS               0
+/* 카운터는 bsp 의 TIM4 를 나눠 쓴다 (micros 를 16 분주, 약 62.5kHz).
+ * 틱(1kHz)보다 충분히 빠르면서 u32 이 19 시간까지 버틴다.
+ * thread cpu 는 두 스냅샷의 차이로 계산하므로 오버플로해도 무방하다. */
+#define configGENERATE_RUN_TIME_STATS               1
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
-#define portGET_RUN_TIME_COUNTER_VALUE()            xTaskGetTickCount()
+#define portGET_RUN_TIME_COUNTER_VALUE()            bspGetRunTimeCounter()
+
+#ifndef __ASSEMBLER__
+uint32_t bspGetRunTimeCounter(void);
+#endif
 
 #define INCLUDE_vTaskPrioritySet                    1
 #define INCLUDE_uxTaskPriorityGet                   1

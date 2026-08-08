@@ -129,6 +129,11 @@ set(NU87_VENDOR_RELAX_FLAGS
   #                       NULL 이 0 으로 들어가 의도대로 동작한다.
   -Wno-char-subscripts
   -Wno-int-conversion
+
+  #   -Wmaybe-uninitialized   fwlib/ram_common/rtl8721d_ipc_api.c
+  #                           if(CpuId==1) / else if(CpuId==0) 로만 IPC_DEV 를 정하고
+  #                           else 가 없다. KM4 에서 CpuId 는 항상 1 이라 실동작은 문제없다.
+  -Wno-maybe-uninitialized
 )
 
 # -Wreturn-mismatch 는 GCC 14 에서 신설된 이름이다.
