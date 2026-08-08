@@ -146,7 +146,7 @@ STM32 프로젝트가 `stm32h5xx_hal_conf.h` 를 같은 자리에 두었던 것�
 날 수 있다. 그때 **툴체인 파일만 `firm-sdk/tools/asdk-gcc.cmake` 로 교체**하면 되고
 **소스와 프로젝트 구조는 전혀 손대지 않는다.**
 
-이것이 CMake 독립 빌드를 택한 실질적 보험이다. ([11](11-wireless-plan.md) ① 항목)
+이것이 CMake 독립 빌드를 택한 실질적 보험이다. ([11](12-wireless-plan.md) ① 항목)
 
 ## 5.7 크로스플랫폼 — Windows / macOS / Linux
 
@@ -168,73 +168,29 @@ SDK 의 이미지 생성 경로는 크로스플랫폼이 아니다:
 
 벤더 스크립트/바이너리는 `firm-sdk/lib/Realtek/imgtool/` 에 **대조용으로만** 둔다.
 
-### 개발환경 구축 — 공통
+### 개발환경 구축
 
-| 항목 | 필요 버전 | 비고 |
+OS별 단계별 설치 절차는 **[07-dev-environment.md](07-dev-environment.md)** 에 따로 정리했다.
+다운로드 URL, 검증 명령, 흔한 실패 원인까지 복사해서 따라갈 수 있게 적어 두었다.
+
+요약하면 필요한 것은 다음과 같다.
+
+| 항목 | 최소 버전 | 비고 |
 |---|---|---|
-| Arm GNU Toolchain | **14.2.Rel1** 이상 권장 | 멀티립에 `thumb/v8-m.main+fp/hard` 가 있어야 한다 |
-| CMake | 3.13 이상 | 4.x 검증됨 |
-| Python | 3.8 이상 + `pyserial` | 플래싱/이미지 도구 |
-| OpenOCD | **0.12.0** 이상 | SWD 디버깅. 0.12 는 `gdb_breakpoint_override`(밑줄) 표기 |
-| Git | — | 서브모듈 (SDK 갱신 시에만) |
+| Arm GNU Toolchain | **13.3** | 13.3.1 · 14.2.1 검증 완료. **배포판 패키지 대신 developer.arm.com 공식 배포본** |
+| CMake | 3.13 | |
+| Ninja 또는 Make | — | |
+| Python + `pyserial` | 3.8 | 플래싱·이미지 생성 |
+| OpenOCD | 0.12.0 | SWD 디버깅 (선택) |
+| CP210x 드라이버 | — | **Windows 만 필요.** macOS/Linux 는 내장 |
 
-확인:
+가장 중요한 검증은 멀티립이다:
 ```bash
 arm-none-eabi-gcc -print-multi-directory -mcpu=cortex-m33 -mfpu=fpv5-sp-d16 -mfloat-abi=hard
-# → thumb/v8-m.main+fp/hard  가 나와야 한다
-python3 -c "import serial; print(serial.__version__)"
-openocd --version
+# → thumb/v8-m.main+fp/hard   가 나와야 한다
 ```
-
-### macOS
-
-```bash
-brew install --cask gcc-arm-embedded     # 또는 brew install arm-none-eabi-gcc
-brew install cmake open-ocd
-pip3 install pyserial
-```
-
-- **CP210x 드라이버는 설치 불필요.** macOS 11+ 에 `AppleUSBSLCOM.dext` 로 내장되어 있다.
-  포트는 `/dev/cu.usbserial-XXXX` 로 나타난다. (`/dev/tty.*` 는 DCD 를 기다려 블록되므로 쓰지 않는다)
-- `st-info --probe` 는 `Found 0 stlink programmers` 를 낸다 (libusb 가 커널 드라이버 detach 권한 없음).
-  **OpenOCD 는 정상 동작하므로 무시**한다.
-- SVG 다이어그램을 직접 렌더링해 확인하려면 `brew install librsvg` (선택).
-
-### Linux (Ubuntu / Debian)
-
-```bash
-sudo apt install cmake git python3-pip openocd
-pip3 install pyserial
-# 툴체인은 배포판 패키지(gcc-arm-none-eabi)가 구버전일 수 있으므로
-# developer.arm.com 의 공식 tarball 권장
-wget https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi.tar.xz
-sudo tar xf arm-gnu-toolchain-*.tar.xz -C /opt
-export PATH=/opt/arm-gnu-toolchain-14.2.rel1-x86_64-arm-none-eabi/bin:$PATH
-```
-
-- **시리얼 포트 권한**: `sudo usermod -aG dialout $USER` 후 재로그인. 포트는 `/dev/ttyUSB0`.
-- **OpenOCD udev 규칙**: ST-LINK 를 sudo 없이 쓰려면
-  `sudo cp /usr/share/openocd/contrib/60-openocd.rules /etc/udev/rules.d/ && sudo udevadm control --reload`
-- CP210x 드라이버는 커널에 내장(`cp210x` 모듈)되어 있다.
-
-### Windows
-
-```powershell
-winget install Kitware.CMake
-winget install Git.Git
-winget install Python.Python.3.12
-pip install pyserial
-# 툴체인: developer.arm.com 의 arm-gnu-toolchain-14.2.rel1-mingw-w64-i686-arm-none-eabi.exe
-# OpenOCD: xpack-openocd 또는 OpenOCD-xPack 릴리스
-```
-
-- **CP210x 드라이버는 설치가 필요하다** — Silicon Labs 의 CP210x VCP Driver.
-  Windows Update 로 자동 설치되기도 한다. 포트는 `COM3` 같은 형태.
-- **ST-LINK 드라이버**: ST 의 ST-LINK USB driver, 또는 OpenOCD 사용 시 **Zadig 로 WinUSB(libusb) 설치**.
-- 빌드 생성기: `cmake -S . -B build -G "MinGW Makefiles"` 또는 Ninja.
-  기존 `firm-sdk/tools/arm-none-eabi-gcc.cmake` 가 `WIN32` 에서 `.exe` 접미사와 MinGW `make` 를 찾도록 되어 있다.
-- 경로 구분자: 우리 Python 도구는 `pathlib` 을 쓰므로 문제없다.
-  다만 **벤더 `*.sh` 는 Windows 에서 동작하지 않는다** — 그래서 Python 으로 대체했다.
+이 값이 다르면 툴체인에 Cortex-M33 하드 부동소수점 라이브러리가 없는 것이고,
+ROM 코드와 ABI 가 맞지 않는다. CMake 가 configure 단계에서 거부한다.
 
 ## 5.8 빌드 / 플래싱 / 디버깅
 

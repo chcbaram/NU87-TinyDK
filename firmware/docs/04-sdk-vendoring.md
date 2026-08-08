@@ -182,4 +182,4 @@ typedef struct cmd_driver_t_ {
 **프로토콜(`cmd.h`)과 쓰기 로직(`loader.c`)은 한 줄도 고치지 않고** WiFi/BLE 업데이트가 된다.
 이것이 계층 분리의 배당금이다.
 
-자세한 내용은 [11-wireless-plan.md](11-wireless-plan.md).
+자세한 내용은 [12-wireless-plan.md](12-wireless-plan.md).

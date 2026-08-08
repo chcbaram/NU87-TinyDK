@@ -41,7 +41,7 @@
 | 코어 | **KM4만 개발**, KM0는 SDK 스톡 이미지를 블롭으로 고정 | KM0가 KM4를 리셋에서 풀어주고 WLAN FW를 로드한다. [02](02-chip-architecture.md) |
 | RTOS | **1단계 bare-metal**, 무선 단계에서 FreeRTOS 전환 | 기존 구조(`while(1) moduleUpdate()`)와 동일. `osal/thread.c` seam이 이미 있음 |
 | 실행 위치 | 1단계는 **전량 SRAM**, 무선 단계에서 XIP 전환 | 456KB SRAM으로 LED+CLI는 충분. 이미지 3파트 복잡도 회피 |
-| 플래싱 | **CP2102N UART 자동 다운로드** (주 경로) | 보드에 자동 리셋 회로가 이미 있음. [07](07-flash-download.md) |
+| 플래싱 | **CP2102N UART 자동 다운로드** (주 경로) | 보드에 자동 리셋 회로가 이미 있음. [07](08-flash-download.md) |
 | 디버깅 | **OpenOCD + ST-LINK/V2-1** — **실동작 검증 완료** | pyOCD는 실측 실패. [03](03-debug-swd.md) |
 
 ## 0.4 단계 계획
@@ -53,11 +53,11 @@
 | **S2** | SWD 디버깅 환경 구축 | [03](03-debug-swd.md) | ✅ |
 | **S3** | 부팅 흐름 / 이미지 포맷 해석 — 라이브 플래시 실측 | [06](06-boot-image.md) | ✅ |
 | **S4** | SDK 참조 빌드 + KM0 블롭 확보 | [04](04-sdk-vendoring.md) | 🚧 |
-| **S5** | UART 플래싱 파이프라인 | [07](07-flash-download.md) | 🚧 |
-| **S6** | CMake 빌드 성립 + BSP 진입점 | [05](05-build-system.md), [08](08-bsp.md) | 🚧 |
-| **S7** | LED 드라이버 → **점멸 확인** | [09](09-driver-led.md) | 🚧 |
-| **S8** | UART / LOG / CLI → **콘솔 확인** | [10](10-driver-uart-log-cli.md) | 🚧 |
-| **S9** | WiFi / BLE | [11](11-wireless-plan.md) | 📋 |
+| **S5** | UART 플래싱 파이프라인 | [07](08-flash-download.md) | 🚧 |
+| **S6** | CMake 빌드 성립 + BSP 진입점 | [05](05-build-system.md), [08](09-bsp.md) | 🚧 |
+| **S7** | LED 드라이버 → **점멸 확인** | [09](10-driver-led.md) | 🚧 |
+| **S8** | UART / LOG / CLI → **콘솔 확인** | [10](11-driver-uart-log-cli.md) | 🚧 |
+| **S9** | WiFi / BLE | [11](12-wireless-plan.md) | 📋 |
 
 **S0~S3을 먼저 끝낸 이유**: 이 칩에서 가장 불확실한 부분이 "부팅 진입과 이미지 포맷"인데,
 SWD가 붙으면 **라이브 칩의 플래시와 레지스터를 직접 읽어** 추측 대신 사실로 확정할 수 있다.

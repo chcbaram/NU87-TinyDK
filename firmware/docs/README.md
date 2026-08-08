@@ -17,12 +17,13 @@ STM32H5 기반 `nu87-fw` 프로젝트를 **NU87 모듈(Realtek RTL8720DF / Ameba
 | 04 | [SDK 벤더링](04-sdk-vendoring.md) | 서브모듈 버전 고정 + manifest 기반 선별 복사, 블롭 추출 | ✅ |
 | 05 | [빌드 시스템](05-build-system.md) | CMake 독립 빌드, 툴체인 분리, **OS별 개발환경 구축** | ✅ |
 | 06 | [부팅 흐름과 이미지 포맷](06-boot-image.md) | 부트 체인, 32바이트 헤더, 링커스크립트 | ✅ |
-| 07 | [UART 다운로드](07-flash-download.md) | CP2102N 자동 다운로드, 플래싱 프로토콜 | 🚧 |
-| 08 | [BSP 계층](08-bsp.md) | 진입점, 클럭, delay/millis/micros | 🚧 |
-| 09 | [LED 드라이버](09-driver-led.md) | RGB LED, table-driven 패턴 이식 | 🚧 |
-| 10 | [UART / LOG / CLI](10-driver-uart-log-cli.md) | LOGUART 드라이버, 부팅 로그, CLI 콘솔 | 🚧 |
-| 11 | [무선 구성 계획](11-wireless-plan.md) | WiFi/BLE 적용 시 구조와 예상 문제 | 🚧 |
-| 12 | [부트로더 / OTA 계획](12-bootloader-ota.md) | OTA1/OTA2, cmd_driver_t 로 WiFi·BLE 업데이트 확장 | 🚧 |
+| 07 | [개발환경 구축](07-dev-environment.md) | **Windows / macOS / Linux 단계별 설치**, 툴체인 버전 정책 | ✅ |
+| 08 | [UART 다운로드](08-flash-download.md) | CP2102N 자동 다운로드, 플래싱 프로토콜 | 🚧 |
+| 09 | [BSP 계층](09-bsp.md) | 진입점, 클럭, delay/millis/micros | 🚧 |
+| 10 | [LED 드라이버](10-driver-led.md) | RGB LED, table-driven 패턴 이식 | 🚧 |
+| 11 | [UART / LOG / CLI](11-driver-uart-log-cli.md) | LOGUART 드라이버, 부팅 로그, CLI 콘솔 | 🚧 |
+| 12 | [무선 구성 계획](12-wireless-plan.md) | WiFi/BLE 적용 시 구조와 예상 문제 | 🚧 |
+| 13 | [부트로더 / OTA 계획](13-bootloader-ota.md) | OTA1/OTA2, cmd_driver_t 로 WiFi·BLE 업데이트 확장 | 🚧 |
 
 ✅ 완료 · 🚧 진행 중/예정
 

@@ -260,7 +260,7 @@ OpenOCD에 RTL872x용 flash bank 드라이버가 **없으므로** `flash write_i
 - Particle `rtl872x.tcl`: 같은 로더를 Tcl 바이트 배열로 내장, `LP_KM4_CTRL 0x4800021C`로 KM4 정지 후
   `rtl872x_flash_read_id / erase / write_bin / verify / wdg_reset` 제공
 
-1단계에서는 **UART 다운로드를 주 경로로 둔다** ([07](07-flash-download.md)).
+1단계에서는 **UART 다운로드를 주 경로로 둔다** ([07](08-flash-download.md)).
 SRAM 배치 이미지는 GDB `load`로 직접 올릴 수 있어 반복 개발에는 그게 더 빠르다.
 
 > ⚠️ **절대 chip-erase 하지 말 것.** 그리고 플래시 오프셋 0을 함부로 덮지 말 것.

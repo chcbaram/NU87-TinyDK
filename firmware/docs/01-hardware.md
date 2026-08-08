@@ -76,7 +76,7 @@ Q1 pin 6 (collector B) ─→ NU87_LOG_TXD = PA7 = UART_DOWNLOAD 스트랩
 ```
 
 → **RTS = CHIP_EN(리셋), DTR = PA7(부트 스트랩)**. esptool과 동일 규약이므로
-공개된 AmebaD 플래셔의 DTR/RTS 시퀀스가 그대로 맞는다. 자세한 내용은 [07-flash-download.md](07-flash-download.md).
+공개된 AmebaD 플래셔의 DTR/RTS 시퀀스가 그대로 맞는다. 자세한 내용은 [08-flash-download.md](08-flash-download.md).
 
 ## 1.5 전원
 
