@@ -3,9 +3,8 @@
 CP2102N 을 통해 플래시에 이미지를 굽는다. 보드에 자동 다운로드 회로가 있어
 버튼을 누르지 않아도 된다.
 
-> **상태**: 다운로드 모드 진입과 프로토콜 형태까지 실측으로 확정했다.
-> `firm-sdk/tools/flash.py` 구현은 아직이다. 현재 실행 검증은
-> `load-sram`(SWD → SRAM)으로 한다. ([09-bsp.md](09-bsp.md) §9.6)
+> **상태**: `firm-sdk/tools/flash.py` 로 소거 · 프로그램 · 체크섬 검증까지 동작한다.
+> 전원을 껐다 켜도 유지된다. SWD → SRAM 로딩(`load-sram`)은 디버깅용으로 남는다.
 
 ## 8.1 자동 다운로드 회로
 
@@ -94,15 +93,48 @@ ser.rts = False; ser.dtr = False
 | `0x29` / `0x31` | `XM_TXREG` / `XM_RXREG` | REG 또는 RAM 읽고 쓰기 |
 | `0x33` | `XM_ROMVER` | ROM 버전 |
 
-**프레임 구조** (`XMODEM_FRAME`, `FRAME_SIZE_1K = 1028`)
+**프레임 구조** — 헤더의 `XMODEM_FRAME`(1028바이트)은 구형 정의다.
+AmebaD 는 **목적지 주소 4바이트가 들어간 1032바이트 프레임**을 쓴다:
+
 ```
-STX(1) | recordNo(1) | ~recordNo(1) | buffer[1024] | checksum(1)
+ 0    1B   0x02 STX
+ 1    1B   recordNo        1 부터, 255 다음 0
+ 2    1B   ~recordNo
+ 3    4B   목적지 주소 LE   ← XMODEM 에 없는 필드
+ 7  1024B  데이터 (부족분 0xFF)
+1031  1B   체크섬 = 0xFF 에서 시작해 0..1030 바이트를 더한 u8
 ```
-필드 이름은 `CRC` 지만 **1바이트 체크섬**이다 (1028 = 1+1+1+1024+1).
-`recordNo` 는 1 부터 시작해 255 에서 0 으로 넘어간다.
+
+주소가 프레임마다 실리므로 별도의 주소 설정 명령이 없다. RAM(`0x00082000`)이든
+플래시(`0x08006000`)든 같은 필드에 넣는다. **플래시 주소는 `0x08000000` 을 포함한
+전체 주소**다 (`IS_FLASH_ADDR()` 로 RAM 과 구분한다).
 
 핸드셰이크 보레이트는 `HANDSHAKE_BAUD = 115200` 고정이다.
 타임아웃 상수: 프레임 대기 1초, 문자 대기 0.5초, 핸드셰이크 2초, 재시도 25회.
+
+### ★ 확장 명령의 인자 길이
+
+각 핸들러는 **정해진 바이트 수를 다 받을 때까지 블록**한다. 한 바이트라도 모자라면
+ACK 없이 타임아웃한 뒤 NAK 루프로 돌아간다 — 겉보기에 "명령을 무시하는" 것처럼 보인다.
+
+| 명령 | 총 길이 | 인자 |
+|---|---|---|
+| `0x17` XMERASE | 7B | 오프셋 4B LE + 섹터수 2B LE |
+| `0x26` TXSTATUS | 4B+ | 레지스터 1B + 길이 1B + 길이만큼의 데이터 |
+| `0x27` XM_CHECKSUM | 9B | 오프셋 4B LE + 길이 4B LE |
+
+`0x17` / `0x27` 의 오프셋은 ROM `FLASH_Erase()` 규약대로 **0 기준**이다
+(`0x08006000` 이 아니라 `0x00006000`). 프레임의 목적지 주소와 기준이 다르다.
+
+`0x17` 은 오프셋이 64KB 정렬이고 섹터수가 16 이상이면 64KB 블록 소거로, 아니면
+4KB 섹터 단위로 돈다. **오프셋 0 + 섹터수 `0xFFFF` 는 전체 칩 소거**이므로 만들지 않는다.
+
+> 이 표는 `imgtool_flashloader_amebad.bin` 을 역어셈블해서 확정했다.
+> 명령 디스패치는 `0x82724` 에 있다.
+> ```
+> arm-none-eabi-objdump -D -b binary -m arm -M force-thumb \
+>     --adjust-vma=0x82000 imgtool_flashloader_amebad.bin
+> ```
 
 ## 8.4 RAM 플래시로더
 
@@ -131,10 +163,44 @@ erase/program 을 수행한다.
 
 평소에는 마지막 하나만 쓰면 된다. 부트로더는 공장 것을 그대로 쓴다.
 
-## 8.6 벽돌이 되지 않는 이유
+## 8.6 플래시가 비어 있을 때 (복구)
 
 **UART 다운로드 모드는 칩 마스크 ROM 에 있다.** 플래시 내용과 무관하게 항상 진입할 수 있다.
-플래시를 잘못 써도 다시 다운로드 모드로 들어가 덮어쓰면 복구된다.
+완전히 빈 칩이든 잘못 쓴 칩이든 같은 방법으로 복구된다.
+
+```bash
+python3 firm-sdk/tools/flash.py --auto --with-boot
+```
+
+세 영역을 전부 쓴다 — 실행 확인 완료:
+
+```
+소거 0x08000000  2 섹터 / 0x08004000  2 섹터 / 0x08006000  34 섹터
+검증 0x08000000  0x35EB30A8 OK
+검증 0x08004000  0x9FBAF1BA OK
+검증 0x08006000  0x027BB77C OK
+```
+
+### 플래시에는 개체별 데이터가 없다
+
+공장 덤프를 4KB 섹터 단위로 훑으면 비어있지 않은 구간은 두 곳뿐이다:
+
+| 구간 | 내용 |
+|---|---|
+| `0x08000000` - `0x08001FFF` | KM0 부트로더 |
+| `0x08004000` - `0x08036FFF` | KM4 부트로더 + 애플리케이션 |
+
+`FLASH_RESERVED_DATA_BASE`(`0x2000`) / `FLASH_SYSTEM_DATA_ADDR`(`0x3000`) 영역은
+**전부 `0xFF` 다.** 부팅 로그의 `#calibration_ok` 와 MAC 주소는 eFuse/OTP 에서 오고,
+UART 플래싱은 OTP 를 건드리지 않는다.
+
+→ **저장소에 있는 것만으로 빈 칩을 완전히 되살릴 수 있다.** 별도로 백업해 둬야 하는
+개체별 값은 없다. `firm-sdk/prebuilt/` 의 세 블롭은 공장 덤프와 바이트 단위로 일치함을
+확인했다.
+
+### 자동 다운로드 회로가 듣지 않을 때
+
+수동 진입: **SW1(PA7)을 누른 채 리셋**하고 놓는다. SW1 이 다운로드 스트랩이다.
 
 다만 다음은 주의한다:
 - OpenOCD 에는 RTL872x 용 flash bank 드라이버가 없다. **SWD 로는 플래시를 못 쓴다.**
@@ -143,29 +209,46 @@ erase/program 을 수행한다.
   `openocd -f nu87.cfg -c init -c "nu87_backup ..." -c shutdown`
 - `chip erase` 는 하지 않는다.
 
-## 8.7 남은 구현
+## 8.7 사용법
 
-`firm-sdk/tools/flash.py`:
-
-```
-1) 다운로드 모드 진입 (§8.1)
-2) 첫 NAK 를 보는 즉시 XMODEM-1K 전송 시작 (§8.2 — 타임아웃이 짧다)
-3) BAUDSET/BAUDCHK 로 보레이트 상향 (1500000, 실패 시 921600)
-   CP2102N 은 3Mbaud 정격이지만 레이아웃에 따라 다르다
-4) imgtool_flashloader_amebad.bin 을 SRAM 0x00082000 에 업로드
-5) 플래시로더의 확장 명령으로 erase / program / verify
+```bash
+python3 firm-sdk/tools/flash.py --auto                 # 포트 자동 선택 + 앱 이미지
+python3 firm-sdk/tools/flash.py --port /dev/cu.usbserial-0001
+python3 firm-sdk/tools/flash.py --auto --with-boot     # 부트로더까지 (복구용)
+python3 firm-sdk/tools/flash.py --auto --image x.bin --addr 0x08006000
 ```
 
-미확정 부분:
-- `BAUDSET` 의 인자 형식 (보레이트 서브커맨드 표. 1500000=0x18, 921600=0x14, 115200=0x0C 로 알려져 있다)
-- 플래시 쓰기 주소를 지정하는 방식. XMODEM 프레임에는 주소 필드가 없다
-- 플래시로더 업로드와 플래시 쓰기의 경계
+VS Code 에서는 `flash` / `flash·자동` / `flash-full` / `flash-image` 태스크를 쓴다.
 
-참고할 공개 구현:
-- `Ameba-AIoT/ameba-arduino-d` → `Ameba_misc/Autoflash_patch/` (C++, Realtek 저장소에 편입됨)
-- `jojoling/ameba_bw16_autoflash` (위 코드의 원본)
+전체 흐름:
+
+```
+1) 115200 으로 열고 DTR/RTS 로 다운로드 모드 진입 (§8.1)
+2) 배너를 흘려보내고 0x15 두 개 확인 (§8.2 — 창이 짧다)
+3) 0x05 <서브커맨드> 로 보레이트 상향 → 호스트도 전환 → 0x07 로 확인
+4) imgtool_flashloader_amebad.bin 을 RAM 0x00082000 에 전송
+5) 0x04 로 로더 실행. ★ 로더는 115200 으로 올라오므로 호스트도 내려가서 재협상
+6) 0x26 01 01 00 (상태 레지스터) → 0x17 로 섹터 소거
+7) 이미지 전송 → 0x04 → 115200 재동기화 → 0x27 로 체크섬 검증
+8) RTS 로 리셋해 정상 부팅
+```
+
+보레이트 서브커맨드: 1500000=`0x18`, 921600=`0x14`, 460800=`0x12`, 115200=`0x0C`.
+
+## 8.8 참고 구현과 그 함정
+
+- `Ameba-AIoT/ameba-arduino-d` → `Ameba_misc/Autoflash_patch/src/upload_image_tool.cpp`
+  (= `jojoling/ameba_bw16_autoflash`). 사본을 `firm-sdk/tools/reference/` 에 둔다.
 - `tmmsunny012/ameba-arduino-d@feature-platformio-support` → `upload_amebad.py` (순수 Python)
-- `Seeed-Studio/ambd_flash_tool` → `tool/macos/amebad_image_tool` (Realtek 바이너리, 크로스체크용)
+- `Seeed-Studio/ambd_flash_tool` → `tool/*/amebad_image_tool`
+
+> **`upload_image_tool.cpp` 를 그대로 따라 하면 안 된다.** `u32` 두 개를 `cmd_buff`
+> offset 1 과 4 에 겹쳐 쓴 뒤 6바이트(`0x17`) / 7바이트(`0x27`)만 보내서 인자가
+> 한두 바이트씩 모자란다. 로더는 나머지 바이트를 기다리다 타임아웃하고 ACK 를 주지 않는다.
+> §8.3 의 표가 실제 규약이다.
+>
+> `Seeed-Studio` 의 `amebad_image_tool` 은 SLIP(`0xC0`/`0xDB`) 프로토콜을 쓰는
+> Wio Terminal 전용 도구라 이 보드와 무관하다.
 
 > `ltchiptool` / LibreTiny 는 AmebaD 를 지원하지 않는다 (`soc/ambd` 모듈 부재).
 > `uartfwburn` 은 AmebaPro2(RTL8735B) 전용이라 무관하다.

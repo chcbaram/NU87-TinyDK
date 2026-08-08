@@ -36,12 +36,21 @@ RAM(0x00082000)이든 플래시(0x08006000)든 같은 필드에 그대로 넣는
   7) 이미지 전송 → 0x04 → 0x27 로 체크섬 검증
   8) RTS 로 리셋해 정상 부팅
 
-명령 인자에 겹침이 있다. 원본 C++ 이 u32 두 개를 offset 1 과 4 에 packing 한 뒤
-6 바이트(0x17) / 7 바이트(0x27)만 보내서 주소의 상위 바이트가 잘린다.
-그래서 실제 전송은 3바이트 오프셋이다. 그대로 재현해야 한다.
+확장 명령의 인자 길이는 imgtool_flashloader_amebad.bin 을 역어셈블해서 확정했다.
+명령 디스패치는 0x82724 에 있고 각 핸들러가 정해진 바이트 수를 다 받을 때까지
+블록된다. 모자라게 보내면 ACK 없이 타임아웃 후 NAK 루프로 돌아간다.
 
-프로토콜 출처: Ameba-AIoT/ameba-arduino-d 의 Ameba_misc/Autoflash_patch/
+  0x17 XMERASE     페이로드 6B : 오프셋 4B LE + 섹터수 2B LE
+  0x26 TXSTATUS    페이로드 2B + 길이만큼의 데이터
+  0x27 XM_CHECKSUM 페이로드 8B : 오프셋 4B LE + 길이 4B LE
+
+0x17 / 0x27 의 오프셋은 ROM FLASH_Erase() 규약대로 0 기준이고,
+1KB 프레임의 목적지 주소는 0x08000000 을 포함한 전체 주소다.
+
+프로토콜 참고 구현: Ameba-AIoT/ameba-arduino-d 의 Ameba_misc/Autoflash_patch/
               src/upload_image_tool.cpp (= jojoling/ameba_bw16_autoflash)
+그 구현은 u32 두 개를 offset 1 과 4 에 겹쳐 packing 한 뒤 6 바이트(0x17) /
+7 바이트(0x27)만 보내서 인자가 한두 바이트씩 모자란다. 따라 하면 안 된다.
 """
 
 import argparse
@@ -61,6 +70,12 @@ TOOLS_DIR = Path(__file__).resolve().parent
 SDK_DIR = TOOLS_DIR.parent                      # firmware/firm-sdk
 PREBUILT_DIR = SDK_DIR / "prebuilt"
 FLASHLOADER = SDK_DIR / "lib/Realtek/imgtool/imgtool_flashloader_amebad.bin"
+
+# 어느 디렉토리에서 실행하든 기본 이미지를 찾는다. 현재 위치의 build/ 를 먼저 보고,
+# 없으면 저장소 표준 위치를 쓴다.
+_LOCAL_IMAGE = Path("build/km0_km4_image2.bin")
+DEFAULT_IMAGE = (_LOCAL_IMAGE if _LOCAL_IMAGE.exists()
+                 else SDK_DIR.parent / "nu87-fw/build/km0_km4_image2.bin")
 
 SYNC = 0x15
 ACK = 0x06
@@ -259,15 +274,22 @@ def write_block(ser, seq, addr, data, label=""):
 
 def erase_block(ser, addr, size):
     """
-    0x17 소거. 원본이 u32 두 개를 offset 1/4 에 packing 한 뒤 6 바이트만 보내
-    주소 상위 바이트가 섹터 수의 하위 바이트에 덮인다. 그대로 재현한다.
-      17 | 오프셋 3B LE | 섹터수 2B LE
+    0x17 소거 — 명령 뒤에 페이로드 6 바이트가 온다.
+
+      17 | 오프셋 4B LE | 섹터수 2B LE            (총 7 바이트)
+
+    로더는 오프셋을 ROM FLASH_Erase() 에 그대로 넘긴다. 이 함수는 0 기준
+    오프셋을 받으므로 0x08000000 을 떼고 보낸다.
+    오프셋 0 과 섹터수 0xFFFF 조합은 전체 칩 소거이므로 만들지 않는다.
+
+    섹터수가 16 이상이고 오프셋이 64KB 정렬이면 로더가 64KB 블록 소거로
+    처리하고, 그렇지 않으면 4KB 섹터 단위로 돈다.
     """
     n = (size + SECTOR - 1) // SECTOR
-    off = addr & 0x00FFFFFF
-    cmd = [0x17,
-           off & 0xFF, (off >> 8) & 0xFF, (off >> 16) & 0xFF,
-           n & 0xFF, (n >> 8) & 0xFF]
+    off = addr & ~FLASH_BASE & 0x00FFFFFF
+    if off == 0 and n == 0xFFFF:
+        raise FlashError("전체 칩 소거 조합이다. 크기를 조정할 것")
+    cmd = bytes([0x17]) + struct.pack("<IH", off, n)
     # 섹터 소거는 섹터당 수십~수백 ms 걸린다. 넉넉히 기다린다.
     send_cmd(ser, cmd, timeout=max(120.0, n * 2.0))
 
@@ -287,11 +309,15 @@ def file_checksum(data):
 
 
 def verify_block(ser, addr, size):
-    """0x27 검증. 응답은 0x27 + u32 LE 체크섬."""
+    """
+    0x27 검증 — 명령 뒤에 페이로드 8 바이트가 온다.
+
+      27 | 오프셋 4B LE | 길이 4B LE               (총 9 바이트)
+
+    응답은 0x27 에 이어 u32 LE 체크섬이다.
+    """
     off = addr & ~FLASH_BASE & 0x00FFFFFF
-    cmd = bytes([0x27,
-                 off & 0xFF, (off >> 8) & 0xFF, (off >> 16) & 0xFF,
-                 size & 0xFF, (size >> 8) & 0xFF, (size >> 16) & 0xFF])
+    cmd = bytes([0x27]) + struct.pack("<II", off, size)
     wait_sync(ser, 1)
     ser.write(cmd)
     ser.flush()
@@ -402,7 +428,7 @@ def main():
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--port", help="시리얼 포트")
     g.add_argument("--auto", action="store_true", help="포트 자동 선택")
-    ap.add_argument("--image", default="build/km0_km4_image2.bin", help="구울 이미지")
+    ap.add_argument("--image", default=str(DEFAULT_IMAGE), help="구울 이미지")
     ap.add_argument("--addr", default=hex(ADDR_APP), help="이미지 플래시 주소")
     ap.add_argument("--with-boot", action="store_true",
                     help="부트로더(km0_boot / km4_boot)까지 함께 굽는다 (복구용)")
