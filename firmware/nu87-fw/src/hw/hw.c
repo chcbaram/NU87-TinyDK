@@ -47,6 +47,9 @@ bool hwInit(void)
   logPrintf("Booting..Reason\t\t: 0x%X\r\n", (unsigned int)BOOT_Reason());
   logPrintf("\n");
 
+  resetInit();
+  gpioInit();
+
   logBoot(false);
 
   return true;

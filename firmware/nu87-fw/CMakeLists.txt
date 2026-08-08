@@ -89,8 +89,6 @@ set(EXCLUDE_PATHS
   fwlib/ram_common/rtl8721d_gdma_ram.c    # osdep_service.h
 
   # 아직 RTL 용으로 작성하지 않은 우리 드라이버 (hw_def.h 에서 스위치도 꺼 두었다)
-  hw/driver/gpio.c
-  hw/driver/reset.c
   hw/driver/rtc.c
 )
 

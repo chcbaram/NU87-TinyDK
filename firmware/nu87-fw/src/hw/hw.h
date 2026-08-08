@@ -9,6 +9,8 @@ extern "C" {
 
 
 #include "led.h"
+#include "gpio.h"
+#include "reset.h"
 #include "uart.h"
 #include "cli.h"
 #include "log.h"
