@@ -129,9 +129,17 @@ bool uartFlush(uint8_t ch)
     return uart_tbl[ch].p_driver->flush();
   }
 
+  // 상대가 계속 보내면 Readable 이 내려가지 않는다. 시간으로 끊는다.
+  uint32_t pre_time = millis();
+
   while (LOGUART_Readable())
   {
     LOGUART_GetChar(_FALSE);
+
+    if (millis() - pre_time >= UART_FLUSH_TIMEOUT_MS)
+    {
+      return false;
+    }
   }
   return true;
 }

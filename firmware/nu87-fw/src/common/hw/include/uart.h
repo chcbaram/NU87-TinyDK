@@ -11,6 +11,12 @@ extern "C" {
 
 #define UART_MAX_CH         HW_UART_MAX_CH
 
+// uartFlush() 가 수신 데이터를 버리는 최대 시간. 상대가 끊임없이 보내는 경우
+// 빠져나오지 못하는 것을 막는다.
+#ifndef UART_FLUSH_TIMEOUT_MS
+#define UART_FLUSH_TIMEOUT_MS   100
+#endif
+
 
 typedef struct uart_driver_t_ uart_driver_t;
 
