@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 610" width="900" height="610" role="img" aria-labelledby="t d">
+  <title id="t">nu87-fw 계층 구조</title>
+  <desc id="d">ap / common 계층은 MCU와 무관하게 유지되고, hw / bsp / lib 계층만 MCU별로 재작성된다.</desc>
+
+  <style>
+    .bg    { fill:#FBFBFD; stroke:#D8DCE4; stroke-width:1 }
+    .band  { stroke:#D8DCE4; stroke-width:1 }
+    .path  { font:600 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; fill:#111827 }
+    .sub   { font:600 11.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; fill:#374151 }
+    .desc  { font:400 12px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#4B5563 }
+    .note  { font:400 11px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#6B7280 }
+    .ttl   { font:700 16px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#111827 }
+    .stl   { font:400 12px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#6B7280 }
+    .badge { font:700 11px system-ui,-apple-system,"Segoe UI",sans-serif }
+    .bline { font:700 12px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#B91C1C }
+    .star  { font:600 12px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#B45309 }
+  </style>
+
+  <rect class="bg" x="1" y="1" width="898" height="608" rx="10"/>
+
+  <text class="ttl" x="28" y="34">nu87-fw 계층 구조</text>
+  <text class="stl" x="28" y="54">MCU가 바뀌어도 ap 계층은 동일한 hw 인터페이스를 사용한다</text>
+
+  <!-- ══════════ ap ══════════ -->
+  <rect class="band" x="28" y="72" width="844" height="72" rx="7" fill="#EEF0FF"/>
+  <rect x="28" y="72" width="5" height="72" rx="2.5" fill="#4F46E5"/>
+  <text class="path" x="48" y="96">src/ap/</text>
+  <text class="desc" x="48" y="116">애플리케이션</text>
+  <text class="sub"  x="238" y="96">modules/module.c</text>
+  <text class="note" x="238" y="115">.module 링커 섹션 레지스트리 — MODULE_DEF / _smodule.._emodule</text>
+  <text class="sub"  x="238" y="134">ap.c</text>
+  <text class="note" x="290" y="134">while(1) moduleUpdate()  ·  updateLED()</text>
+  <rect x="744" y="94" width="112" height="26" rx="13" fill="#4F46E5"/>
+  <text class="badge" x="800" y="111" fill="#FFFFFF" text-anchor="middle">MCU 무관 · 그대로</text>
+
+  <!-- ══════════ common ══════════ -->
+  <rect class="band" x="28" y="154" width="844" height="102" rx="7" fill="#E8F8FB"/>
+  <rect x="28" y="154" width="5" height="102" rx="2.5" fill="#0E7490"/>
+  <text class="path" x="48" y="178">src/common/</text>
+  <text class="desc" x="48" y="198">MCU 비의존</text>
+  <text class="desc" x="48" y="215">계층</text>
+
+  <text class="star" x="238" y="178">★ hw/include/</text>
+  <text class="note" x="352" y="178">포터블 API 계약 — 헤더 약 70개. 이 시그니처는 절대 변하지 않는다</text>
+  <text class="sub"  x="238" y="197">hw/src/</text>
+  <text class="note" x="330" y="197">cli.c (861줄)  ·  cli_gui.c  ·  swtimer.c   → 수정 0줄로 이식</text>
+  <text class="sub"  x="238" y="216">core/</text>
+  <text class="note" x="330" y="216">qbuffer.c  ·  util_core.c</text>
+  <text class="sub"  x="238" y="235">def.h</text>
+  <text class="note" x="330" y="235">err_code.h  ·  evt_code.h</text>
+  <rect x="744" y="192" width="112" height="26" rx="13" fill="#0E7490"/>
+  <text class="badge" x="800" y="209" fill="#FFFFFF" text-anchor="middle">MCU 무관 · 그대로</text>
+
+  <!-- ══════════ 포팅 경계선 ══════════ -->
+  <line x1="28" y1="274" x2="872" y2="274" stroke="#DC2626" stroke-width="2" stroke-dasharray="7 5"/>
+  <rect x="352" y="263" width="196" height="22" rx="11" fill="#FEE2E2" stroke="#DC2626" stroke-width="1"/>
+  <text class="bline" x="450" y="278" text-anchor="middle">▲ 포팅 경계선 ▼</text>
+
+  <!-- ══════════ hw ══════════ -->
+  <rect class="band" x="28" y="296" width="844" height="84" rx="7" fill="#FFF1E4"/>
+  <rect x="28" y="296" width="5" height="84" rx="2.5" fill="#C2410C"/>
+  <text class="path" x="48" y="320">src/hw/</text>
+  <text class="desc" x="48" y="340">MCU별 드라이버</text>
+  <text class="desc" x="48" y="357">구현</text>
+  <text class="star" x="238" y="320">★ hw_def.h</text>
+  <text class="note" x="330" y="320">단일 설정 seam — _USE_HW_* / HW_*_MAX_CH / 보드 핀 enum</text>
+  <text class="sub"  x="238" y="341">driver/</text>
+  <text class="note" x="330" y="341">led.c  uart.c  gpio.c  log.c  reset.c  fault.c  assert.c</text>
+  <text class="note" x="238" y="364">벤더 SDK 심볼(GPIO_InitTypeDef, _PA_13, DelayMs)은 여기까지만 보인다</text>
+  <rect x="744" y="325" width="112" height="26" rx="13" fill="#C2410C"/>
+  <text class="badge" x="800" y="342" fill="#FFFFFF" text-anchor="middle">● 재작성</text>
+
+  <!-- ══════════ bsp ══════════ -->
+  <rect class="band" x="28" y="390" width="844" height="84" rx="7" fill="#FDECEC"/>
+  <rect x="28" y="390" width="5" height="84" rx="2.5" fill="#B91C1C"/>
+  <text class="path" x="48" y="414">src/bsp/</text>
+  <text class="desc" x="48" y="434">MCU 시작 ·</text>
+  <text class="desc" x="48" y="451">클럭 · 시간</text>
+  <text class="sub"  x="238" y="414">bsp.c</text>
+  <text class="note" x="330" y="414">bspInit()  ·  delay()  ·  delayUs()  ·  millis()  ·  micros()</text>
+  <text class="sub"  x="238" y="435">device/</text>
+  <text class="note" x="330" y="435">진입점(Img2EntryFun0)  ·  벡터테이블  ·  syscalls</text>
+  <text class="sub"  x="238" y="456">ldscript/</text>
+  <text class="note" x="330" y="456">nu87_km4_img2.ld — .module 섹션 이식 필수</text>
+  <rect x="744" y="419" width="112" height="26" rx="13" fill="#B91C1C"/>
+  <text class="badge" x="800" y="436" fill="#FFFFFF" text-anchor="middle">● 재작성</text>
+
+  <!-- ══════════ firm-sdk (프로젝트 밖, 공유) ══════════ -->
+  <line x1="28" y1="492" x2="872" y2="492" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="2 4"/>
+  <text class="note" x="450" y="488" text-anchor="middle" fill="#64748B">▲ 프로젝트 경계  ·  아래는 부트로더/펌웨어 공유 영역 ▼</text>
+  <rect class="band" x="28" y="500" width="844" height="80" rx="7" fill="#F2F4F7"/>
+  <rect x="28" y="500" width="5" height="80" rx="2.5" fill="#475569"/>
+  <text class="path" x="48" y="524">../firm-sdk/</text>
+  <text class="desc" x="48" y="544">벤더 SDK</text>
+  <text class="desc" x="48" y="561">(공유 · 선별 복사)</text>
+  <text class="sub"  x="238" y="524">lib/Realtek/</text>
+  <text class="note" x="330" y="524">fwlib/{include,ram_common,ram_hp,usrcfg} · cmsis/ · swlib/ · ld/</text>
+  <text class="sub"  x="238" y="544">prebuilt/</text>
+  <text class="note" x="330" y="544">km0_boot · km4_boot · km0_image2  (KM0 스톡 블롭)</text>
+  <text class="note" x="238" y="566">tools/sdk_manifest.txt 기준 복사 → git 커밋. 빌드에 서브모듈 불필요</text>
+  <rect x="744" y="527" width="112" height="26" rx="13" fill="#475569"/>
+  <text class="badge" x="800" y="544" fill="#FFFFFF" text-anchor="middle">○ 공유</text>
+</svg>

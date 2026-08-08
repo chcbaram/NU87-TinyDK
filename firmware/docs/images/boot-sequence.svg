@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 1010" width="940" height="1010" role="img" aria-labelledby="t d">
+  <title id="t">RTL8720DF 부팅 시퀀스 — 전원 인가부터 KM4 main() 까지</title>
+  <desc id="d">칩 ROM이 KM0 부트로더를 로드하고, KM0 IMG2가 KM4를 리셋에서 해제하며, KM4 부트로더를 거쳐 KM4 IMG2의 app_start()가 main()을 호출한다.</desc>
+
+  <style>
+    .bg   { fill:#FBFBFD; stroke:#D8DCE4; stroke-width:1 }
+    .lane { stroke:#D8DCE4; stroke-width:1; stroke-dasharray:4 4 }
+    .box  { stroke-width:1.2 }
+    .ttl  { font:700 16px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#111827 }
+    .stl  { font:400 12px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#6B7280 }
+    .lane-l{ font:700 12px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#9CA3AF }
+    .h    { font:700 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; fill:#111827 }
+    .m    { font:400 11.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; fill:#374151 }
+    .n    { font:400 11px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#4B5563 }
+    .addr { font:400 10.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; fill:#6B7280 }
+    .star { font:700 11px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#B45309 }
+    .ours { font:700 11px system-ui,-apple-system,"Segoe UI",sans-serif; fill:#B91C1C }
+  </style>
+
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4B5563"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#B45309"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="1" y="1" width="938" height="1008" rx="10"/>
+  <text class="ttl" x="28" y="34">RTL8720DF 부팅 시퀀스 — 전원 인가 → KM4 main()</text>
+  <text class="stl" x="28" y="54">주소·크기는 NU87-TinyDK 공장 출하 플래시를 SWD로 덤프해 확인한 실측값</text>
+
+  <!-- lane separators -->
+  <line class="lane" x1="500" y1="72" x2="500" y2="980"/>
+  <text class="lane-l" x="262" y="88" text-anchor="middle">KM0  ·  Cortex-M23  ·  20 MHz</text>
+  <text class="lane-l" x="720" y="88" text-anchor="middle">KM4  ·  Cortex-M33급  ·  200 MHz</text>
+
+  <!-- ① CHIP_EN -->
+  <rect class="box" x="28" y="100" width="444" height="46" rx="7" fill="#F2F4F7" stroke="#94A3B8"/>
+  <text class="h" x="44" y="122">① CHIP_EN = 1  (전원 인가 / SW2 RESET)</text>
+  <text class="n" x="44" y="139">파워온 스트랩 래치 — PA27 NORMAL_MODE_SEL · PA7 UART_DOWNLOAD · PA30 SPS_SEL</text>
+
+  <line x1="250" y1="146" x2="250" y2="164" stroke="#4B5563" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ② ROM -->
+  <rect class="box" x="28" y="166" width="444" height="62" rx="7" fill="#F2F4F7" stroke="#64748B"/>
+  <text class="h" x="44" y="188">② 칩 마스크 ROM 부트로더</text>
+  <text class="addr" x="332" y="188">KM0 ITCM ROM  0x00000000  96KB</text>
+  <text class="n" x="44" y="206">PA7 이 Low 면 여기서 UART 다운로드 모드로 진입하고 부팅하지 않는다</text>
+  <text class="n" x="44" y="221">플래시 컨트롤러 초기화 → 0x08000000 의 IMG1 헤더 검증</text>
+
+  <line x1="250" y1="228" x2="250" y2="246" stroke="#4B5563" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ③ KM0 IMG1 -->
+  <rect class="box" x="28" y="248" width="444" height="92" rx="7" fill="#E8F8FB" stroke="#0E7490"/>
+  <text class="h" x="44" y="270">③ KM0 IMG1  =  km0_boot_all.bin</text>
+  <text class="addr" x="44" y="287">flash 0x08000000  ·  2 파트  ·  4500 B</text>
+  <text class="m" x="44" y="306">part1  len 0x7F0   load 0x08000020   xip_boot (제자리)</text>
+  <text class="m" x="44" y="322">part2  len 0x964   load 0x00082000   ram_1 → KM0 SRAM</text>
+  <text class="n" x="44" y="337">OTA 슬롯 선택(RSIP/Flash-MMU 판독) · IMG2 시그니처 검증 · Flash MMU 설정</text>
+
+  <line x1="250" y1="340" x2="250" y2="358" stroke="#4B5563" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ④ KM0 IMG2 -->
+  <rect class="box" x="28" y="360" width="444" height="196" rx="7" fill="#E8F8FB" stroke="#0E7490"/>
+  <text class="h" x="44" y="382">④ KM0 IMG2   (스톡 유지 — 우리가 만들지 않는다)</text>
+  <text class="addr" x="44" y="399">flash 0x08006000 → XIP 가상 0x0C000000  ·  0x1B000 (110592 B)</text>
+  <text class="m" x="44" y="418">Img2EntryFun0 → app_start()</text>
+  <text class="addr" x="266" y="418">rtl8721dlp_app_start.c</text>
+  <text class="m" x="44" y="435">→ main()</text>
+  <text class="addr" x="130" y="435">src/src_lp/main.c</text>
+
+  <rect x="56" y="444" width="404" height="102" rx="5" fill="#FFFFFF" stroke="#A5D8E4"/>
+  <text class="m" x="70" y="462">IPC_INTHandler 등록  ·  shell_init_ram()  ·  app_pmu_init()</text>
+  <text class="m" x="70" y="480">km4_flash_highspeed_init()</text>
+  <text class="m" x="70" y="498">km4_boot_on()</text>
+  <text class="star" x="196" y="498">★ KM4 를 리셋에서 해제</text>
+  <text class="m" x="70" y="516">wifi_FW_init_ram()</text>
+  <text class="star" x="204" y="516">★ WLAN MAC 펌웨어 로드</text>
+  <text class="m" x="70" y="536">vTaskStartScheduler()</text>
+  <text class="n" x="228" y="536">FreeRTOS — KM0 는 계속 RTOS 로 돈다</text>
+
+  <!-- KM0 -> KM4 arrow -->
+  <path d="M472 498 L560 498 L560 168" fill="none" stroke="#B45309" stroke-width="2" marker-end="url(#ar)"/>
+  <text class="star" x="568" y="330" transform="rotate(-90 568 330)" text-anchor="middle">km4_boot_on()</text>
+
+  <!-- ⑤ KM4 IMG1 -->
+  <rect class="box" x="580" y="166" width="332" height="96" rx="7" fill="#FFF1E4" stroke="#C2410C"/>
+  <text class="h" x="596" y="188">⑤ KM4 IMG1</text>
+  <text class="addr" x="596" y="205">km4_boot_all.bin  ·  flash 0x08004000</text>
+  <text class="addr" x="596" y="220">2 파트  ·  4456 B</text>
+  <text class="m" x="596" y="239">part1  len 0     xip_boot (비어 있음)</text>
+  <text class="m" x="596" y="255">part2  len 0x1128  → 0x1007D000</text>
+
+  <line x1="746" y1="262" x2="746" y2="280" stroke="#4B5563" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ⑥ KM4 IMG2 header -->
+  <rect class="box" x="580" y="282" width="332" height="86" rx="7" fill="#FFF1E4" stroke="#C2410C"/>
+  <text class="h" x="596" y="304">⑥ KM4 IMG2 진입</text>
+  <text class="addr" x="596" y="321">flash 0x08021000 → XIP 가상 0x0E000000</text>
+  <text class="m" x="596" y="340">Img2EntryFun0 =</text>
+  <text class="m" x="608" y="354">{ app_start, NULL, NewVectorTable }</text>
+  <text class="ours" x="596" y="364">여기서부터 우리 코드로 대체한다</text>
+
+  <line x1="746" y1="368" x2="746" y2="384" stroke="#4B5563" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ⑦ app_start -->
+  <rect class="box" x="580" y="386" width="332" height="440" rx="7" fill="#FDECEC" stroke="#B91C1C"/>
+  <text class="h" x="596" y="408">⑦ app_start()</text>
+  <text class="addr" x="596" y="423">rtl8721dhp_app_start.c</text>
+  <text class="n" x="750" y="423">■ 유지  ■ 제거</text>
+
+  <rect x="604" y="432" width="284" height="188" rx="5" fill="#FFFFFF" stroke="#F0B4B4"/>
+  <text class="m" x="616" y="450">irq_table_init(MSP_RAM_HP_NS)</text>
+  <text class="n" x="616" y="464">동적 IRQ 등록 체계 — 무선 단계 필수</text>
+  <text class="m" x="616" y="483">VectorTableOverride()</text>
+  <text class="m" x="616" y="501">memset(__bss_start__..__bss_end__, 0)</text>
+  <text class="m" x="616" y="519">Cache_Enable(ENABLE)</text>
+  <text class="m" x="616" y="537">SystemSetCpuClk(CPU_CLOCK_SEL_VALUE)</text>
+  <text class="m" x="616" y="555">SOCPS_InitSYSIRQ_HP()</text>
+  <text class="m" x="616" y="573">__libc_init_array()</text>
+  <text class="m" x="616" y="591">SP 8바이트 정렬 (asm bic sp,#7)</text>
+  <text class="m" x="616" y="609">mpu_init() · app_vdd1833_detect()</text>
+
+  <rect x="604" y="630" width="284" height="112" rx="5" fill="#F6F7F9" stroke="#D0D5DD" stroke-dasharray="4 3"/>
+  <text class="m" x="616" y="648" fill="#9AA1AC">app_init_psram()</text>
+  <text class="n" x="616" y="661" fill="#9AA1AC">8720DF 는 PSRAM 없음 — psram 파트 len=0</text>
+  <text class="m" x="616" y="679" fill="#9AA1AC">os_heap_init()</text>
+  <text class="m" x="616" y="697" fill="#9AA1AC">__NVIC_SetVector(SVC/PendSV/SysTick)</text>
+  <text class="n" x="616" y="710" fill="#9AA1AC">FreeRTOS 벡터 — 무선 단계에서 복원</text>
+  <text class="m" x="616" y="728" fill="#9AA1AC">BOOT_IMG3() · cm_backtrace_init()</text>
+
+  <rect x="604" y="752" width="284" height="62" rx="5" fill="#FEF3C7" stroke="#D9A400"/>
+  <text class="m" x="616" y="770">RAM_IMG2_VALID_PATTEN[20]</text>
+  <text class="m" x="616" y="786">= 'R','T','K','W','i','n',0x0,0xff …</text>
+  <text class="star" x="616" y="805">빠지면 부팅 자체가 안 된다</text>
+
+  <line x1="746" y1="826" x2="746" y2="846" stroke="#4B5563" stroke-width="1.4" marker-end="url(#a)"/>
+
+  <!-- ⑧ main -->
+  <rect class="box" x="580" y="848" width="332" height="136" rx="7" fill="#EEF0FF" stroke="#4F46E5"/>
+  <text class="h" x="596" y="870">⑧ main()</text>
+  <text class="addr" x="672" y="870">src/main.c</text>
+  <text class="m" x="596" y="894">bspInit();</text>
+  <text class="n" x="700" y="894">클럭 · SysTick · delay</text>
+  <text class="m" x="596" y="914">hwInit();</text>
+  <text class="n" x="700" y="914">cli log swtimer led uart</text>
+  <text class="m" x="596" y="934">apInit();</text>
+  <text class="n" x="700" y="934">moduleInit()</text>
+  <text class="m" x="596" y="954">apMain();</text>
+  <text class="n" x="700" y="954">while(1) moduleUpdate()</text>
+  <text class="n" x="596" y="975">1단계 bare-metal — 스케줄러 없음</text>
+
+  <!-- 좌하단 메모 -->
+  <rect x="28" y="576" width="444" height="118" rx="7" fill="#FFFFFF" stroke="#D8DCE4"/>
+  <text class="h" x="44" y="598">디버깅 시 반드시 지킬 순서</text>
+  <text class="n" x="44" y="618">KM0 가 KM4 에 전원을 넣으므로, KM0 부팅 전에는 AP2 가 응답하지 않는다.</text>
+  <text class="n" x="44" y="635">플래시가 비어 있으면 KM0 이미지를 먼저 굽고 → 리셋 → 그 다음 KM4 attach.</text>
+  <text class="n" x="44" y="652">SW3 을 누르면 PA27(SWDIO)이 Low 로 당겨져 부팅에 실패한다. 누르지 말 것.</text>
+  <text class="n" x="44" y="676">우리 보드는 순정 펌웨어가 있어 KM0 가 정상 부팅 → 바로 KM4 attach 성공.</text>
+
+  <rect x="28" y="712" width="444" height="114" rx="7" fill="#FFFFFF" stroke="#D8DCE4"/>
+  <text class="h" x="44" y="734">1단계에서 우리가 만드는 것 / 재사용하는 것</text>
+  <text class="n" x="44" y="756">재사용 (공장 플래시에서 추출)</text>
+  <text class="m" x="212" y="756">km0_boot_all.bin · km4_boot_all.bin</text>
+  <text class="m" x="212" y="772">km0_image2_all.bin</text>
+  <text class="n" x="44" y="795">새로 빌드</text>
+  <text class="m" x="212" y="795">km4_image2_all.bin  (전량 SRAM 배치)</text>
+  <text class="n" x="44" y="815">최종 이미지</text>
+  <text class="m" x="212" y="815">cat km0_image2_all.bin km4_image2_all.bin</text>
+</svg>
