@@ -116,6 +116,19 @@ set(NU87_VENDOR_RELAX_FLAGS
   -Wno-error=int-conversion
   -Wno-error=implicit-function-declaration
   -Wno-error=incompatible-pointer-types
+
+  # 아래 둘은 벤더 코드에 남아 있는 실제 경고다. 고치려면 벤더 소스를 패치해야
+  # 하는데 SDK 를 다시 동기화할 때마다 되살아나므로 벤더 파일에 한해 끈다.
+  # 우리 소스에는 적용되지 않는다.
+  #
+  #   -Wchar-subscripts   fwlib/ram_common/rtl8721d_ram_libc.c 3곳
+  #                       isdigit(*fmt1) 에 char 를 그대로 넘긴다.
+  #                       '0'~'9' 만 판별하므로 음수 인덱스가 되지 않는다.
+  #   -Wint-conversion    fwlib/ram_common/rtl8721d_gdma_memcpy.c 1곳
+  #                       GDMA_ChnlAlloc(..., NULL, ...) 의 3번째 인자가 u32 다.
+  #                       NULL 이 0 으로 들어가 의도대로 동작한다.
+  -Wno-char-subscripts
+  -Wno-int-conversion
 )
 
 # -Wreturn-mismatch 는 GCC 14 에서 신설된 이름이다.
