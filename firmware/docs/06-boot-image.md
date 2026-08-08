@@ -46,7 +46,102 @@
 부트로더는 **헤더 체인을 순차적으로 걸어가며**(현재 이미지 끝 = 다음 헤더 시작)
 유효하지 않은 시그니처를 만나면 멈춘다.
 
-## 6.3 실측 플래시 레이아웃 (공장 출하 펌웨어)
+## 6.3 플래시 메모리 맵 (4MB)
+
+슬롯 경계는 `fwlib/usrcfg/rtl8721d_bootcfg.c` 의 `OTA1_START` / `OTA2_START` 가 정한다.
+
+```
+물리 주소                    크기      사용      내용
+──────────────────────────────────────────────────────────────────────────────
+0x08000000 ┌──────────────┐    8 KB    4.4 KB   KM0 부트로더  km0_boot_all.bin
+           │              │                     SRAM 으로 복사되어 실행 (XIP 아님)
+0x08002000 ├──────────────┤    4 KB       —     예약 FLASH_RESERVED_DATA_BASE
+           │              │                     전부 0xFF
+0x08003000 ├──────────────┤    4 KB       —     시스템 데이터 FLASH_SYSTEM_DATA_ADDR
+           │              │                     전부 0xFF
+0x08004000 ├──────────────┤    8 KB    4.4 KB   KM4 부트로더  km4_boot_all.bin
+           │              │                     SRAM(0x1007D000) 으로 복사되어 실행
+0x08006000 ╞══════════════╡ 1024 KB  134.6 KB   ★ OTA1 슬롯   km0_km4_image2.bin
+           │              │                       KM0 image2   108.0 KB
+           │              │                       KM4 image2    26.6 KB  ← 우리 펌웨어
+0x08106000 ╞══════════════╡ 1024 KB       —     OTA2 슬롯 (미사용)
+0x08206000 ├──────────────┤ 2024 KB       —     빈 영역 0xFF
+0x08400000 └──────────────┘
+                            ─────────
+                             4096 KB   = 4 MB
+```
+
+### OTA1 슬롯 내부
+
+```
+0x08006000  ┌ km0_image2_all.bin ─────────────────────────── 110592 B (108.0 KB)
+            │  [hdr 32B] xip    96768 B  -> 가상 0x0C000020   KM0 XIP
+            │  [hdr 32B] ram    10128 B  -> 0x00083000        KM0 SRAM
+            │  4KB 패딩 (0x1A1D0 -> 0x1B000)
+0x08021000  ├ km4_image2_all.bin ──────────────────────────── 우리 펌웨어
+            │  [hdr 32B] xip             -> 가상 0x0E000020   KM4 XIP
+            │  [hdr 32B] ram             -> 0x10005000        KM4 SRAM
+            │  [hdr 32B] psram      0 B  -> 0x02000020        PSRAM 없음
+            └
+```
+
+두 파일의 **단순 concat** 이고 각 파트가 자기 32바이트 헤더를 갖는다. 총 5파트 체인이다.
+
+### KM4 파트의 물리 주소는 KM0 이미지 크기가 정한다
+
+KM0 부트로더(`bootloader/boot_flash_lp.c`)가 MMU 두 개를 건다:
+
+```c
+/* Mapping KM0 IMG2 to OTA1 */
+BOOT_FLASH_OTA_MMU(0, 0x0C000000, OTA_Region[ota_idx],          &LsSize);
+/* Mapping KM4 IMG2 to OTA1, should be 4 KB aligned */
+BOOT_FLASH_OTA_MMU(1, 0x0E000000, OTA_Region[ota_idx] + LsSize, NULL);
+```
+
+`LsSize` 는 KM0 이미지가 자기 헤더로 알려주는 크기를 4KB 로 올린 값이다:
+
+```c
+ImgSize = Img2Hdr->image_size + Img2DataHdr->image_size + IMAGE_HEADER_LEN * 2;
+ImgSize = (((ImgSize - 1) >> 12) + 1) << 12;
+```
+
+우리 보드 검산:
+
+```
+96768 + 10128 + 64 = 106960 (0x1A1D0)  -> 4KB 올림 110592 (0x1B000)
+                                        == km0_image2_all.bin 파일 길이  ✓
+KM4 물리 = 0x08006000 + 0x1B000 = 0x08021000
+```
+
+> **가상주소 `0x0C000000` / `0x0E000000` 는 고정이다.** KM0 부트로더의
+> `__ls_flash_text_start__` / `__hs_flash_text_start__` 에서 오는 컴파일 타임 상수라
+> 이미지 크기와 무관하다. KM0 블롭이 바뀌어도 부트로더가 물리 주소를 알아서 따라온다.
+>
+> **지켜야 하는 것은 `km0_image2_all.bin` 의 파일 길이다.** 위 계산값과 다르면
+> KM4 파트가 부트로더가 보는 자리에 없어 이렇게 무한 대기한다:
+> ```
+> AmebaD Flash Memory Layout is modified!
+> Please download km0_km4_image2.bin instead of km0_image2_all.bin & km4_image2_all.bin!!
+> ```
+> `make_image.py` 가 부트로더와 같은 식으로 계산해 굽기 전에 검사한다.
+
+### ★ psram 파트를 빼먹으면 안 된다
+
+KM0 부트로더는 **KM4 이미지에 한해** part2 뒤에서 psram 헤더를 한 번 더 읽어
+MMU 매핑 크기에 더한다:
+
+```c
+if(idx == 1) {
+    PsramHdr = (IMAGE_HEADER *)(vAddr + ImgSize);
+    ImgSize += (IMAGE_HEADER_LEN + PsramHdr->image_size);
+}
+```
+
+이 파트가 없으면 빈 플래시(`0xFF`)를 헤더로 읽어 `image_size` 가 `0xFFFFFFFF` 가 된다.
+u32 오버플로 덕에 결과적으로 한 페이지 더 크게 잡혀 동작은 하지만 의도한 동작이 아니다.
+**공장 이미지도 길이 0 인 psram 파트를 갖는다.** 우리도 넣는다.
+
+## 6.3.1 실측 파트 체인 (공장 출하 펌웨어)
 
 `firm-sdk/tools/extract_blobs.py` 로 헤더 체인을 파싱한 결과다:
 
@@ -239,56 +334,90 @@ SDK 원본:
 `rom_symbol_acut.ld`는 평문 텍스트라 **어떤 GCC로도 그대로 쓸 수 있다.**
 이것이 표준 arm-none-eabi-gcc 로 갈 수 있는 결정적 이유다.
 
-### 우리 링커스크립트: `src/bsp/ldscript/nu87_km4_img2.ld`
+### 우리 링커스크립트 — 두 가지 배치
 
-1단계는 **전량 SRAM(`BD_RAM_NS` `0x10005000`, 456KB) 배치**로 간다.
-`.xip_image2.text` 를 만들지 않으므로 이미지가 **1파트**로 단순해지고,
-XIP 캐시/플래시쓰기 제약을 전부 회피한다.
-
-**반드시 이식해야 하는 것 — `.module` 섹션:**
-```ld
-.data : {
-  ...
-  . = ALIGN(8);
-  _smodule = .;
-  KEEP (*(.module))
-  KEEP (*(.module*));
-  _emodule = .;
-  ...
-}
 ```
-`ap/modules/module.c`의 `moduleInit()`이 이 심볼로 모듈을 탐색한다:
+src/bsp/ldscript/nu87_km4_img2.ld        전량 SRAM
+src/bsp/ldscript/nu87_km4_img2_xip.ld    XIP  (기본)
+```
+
+CMake 로 고른다:
+
+```bash
+cmake -S . -B build                          # 기본 = xip
+cmake -S . -B build -DNU87_LAYOUT=sram
+```
+
+| | SRAM 배치 | XIP 배치 (기본) |
+|---|---|---|
+| `.text` / `.rodata` | `BD_RAM_NS` | `KM4_IMG2` (가상 `0x0E000020`) |
+| 진입점 / `.data` / `.bss` / 힙 | `BD_RAM_NS` | `BD_RAM_NS` |
+| 이미지 파트 | xip 0B + ram + psram 0B | xip + ram + psram 0B |
+| KM4 SRAM 사용 | 40.7 KB | **14.3 KB** |
+| GDB `load` | ⭕ | ❌ (UART 로 구워야 한다) |
+| 브레이크포인트 | SW BP 무제한 | **HW BP 2개** |
+
+XIP 를 기본으로 둔 이유는 무선 라이브러리다. `lib_wlan.a` 만 해도 text+rodata 가
+422 KB 라 전량 SRAM(476 KB) 배치로는 시작조차 할 수 없다. XIP 면 코드가 전부
+플래시에 있으므로 SRAM 462 KB 가 통째로 버퍼용으로 남는다.
+
+SRAM 배치는 반복 개발용으로 남겨 둔다. 플래시를 건드리지 않고 GDB `load` 로 바로
+올릴 수 있고 소프트웨어 브레이크포인트를 쓸 수 있다.
+
+**반드시 이식해야 하는 것 — `.module` 섹션** (두 배치 공통):
+```ld
+. = ALIGN(8);
+_smodule = .;
+KEEP (*(.module))
+KEEP (*(.module*));
+_emodule = .;
+```
+`ap/modules/module.c` 의 `moduleInit()` 이 이 심볼로 모듈을 탐색한다:
 ```c
-extern uint32_t _smodule;
-extern uint32_t _emodule;
 info.count    = ((int)&_emodule - (int)&_smodule) / sizeof(module_t);
 info.p_module = (module_t *)&_smodule;
 ```
-빠지면 모듈이 하나도 등록되지 않고 `ap`의 `updateLED()`도 호출되지 않는다.
+빠지면 모듈이 하나도 등록되지 않고 `ap` 의 `updateLED()` 도 호출되지 않는다.
 
-**버리는 것 — `.version` 고정번지 섹션.**
-STM32 판은 `0x08000400`에 `firm_ver_t`를 두어 부트로더와 핸드셰이크했지만,
-Ameba 이미지 포맷/OTA 레이아웃과 맞지 않는다. → 평범한 `const` rodata 로 변경.
+**`.version` 은 고정번지가 아니라 이미지 상대 오프셋으로 옮겼다.**
+STM32 판은 `0x08000400` 절대번지에 `firm_ver_t` 를 두었는데, OTA1/OTA2 가 같은
+가상주소로 매핑되는 이 칩에서는 성립하지 않는다. 대신 **RAM 파트 시작 +32** 에 고정한다:
+```ld
+. = __ram_image2_text_start__ + 32;
+__image2_version__ = .;
+KEEP(*(.version))
+```
+두 배치가 같은 규칙을 쓰므로 부트로더나 호스트 툴이 배치를 구분할 필요가 없다.
 
 ## 6.7 이미지 생성 파이프라인
 
-`tools/make_image.sh` (CMake POST_BUILD 에서 호출):
+`firm-sdk/tools/make_image.py` (CMake POST_BUILD 에서 호출). 벤더의 `prepend_header.sh`
+와 플랫폼별 `checksum` 바이너리를 쓰지 않는다 — bash 전용이라 크로스플랫폼이 아니고,
+32바이트 헤더는 `struct.pack` 몇 줄이면 된다.
 
-```bash
-# 1) 링크 결과에서 섹션 분리
-arm-none-eabi-objcopy -j .ram_image2.entry -j .ram_image2.text -j .ram_image2.data \
-                      -O binary nu87-fw.elf ram_2.bin
+```
+1) 배치 판별      .map 의 __flash_text_start__ 가 0x0E.. 대면 XIP
+2) 섹션 추출      objcopy -O binary
+     ram 파트  .ram_image2.entry / .text / .data   (+ SRAM 배치면 .ARM.extab/.exidx)
+     xip 파트  .xip_image2.text / .ARM.extab / .ARM.exidx
+3) 헤더 부착      [hdr]xip + [hdr]ram + [hdr]psram(0B)
+     로드 주소는 .map 의 __flash_text_start__ / __ram_image2_text_start__ 에서 읽는다
+4) KM0 블롭과 결합
+     km0_image2_all.bin ‖ km4_image2_all.bin  ->  km0_km4_image2.bin
+     ※ KM0 블롭 길이가 부트로더 계산값과 같은지 검사한다 (§6.3)
+5) 검증           페이로드 +32 에서 firm_ver_t 를 되읽어 이름/버전을 출력
+```
 
-# 2) 32바이트 헤더 부착 (SDK prepend_header.sh 재사용)
-./prepend_header.sh ram_2.bin __ram_image2_text_start__ nu87-fw.map
-#   → ram_2_prepend.bin
+출력 예 (XIP 배치):
 
-# 3) KM4 이미지 = (1파트이므로 그대로)
-cp ram_2_prepend.bin km4_image2_all.bin
-
-# 4) KM0 스톡 블롭과 결합
-cat firm-sdk/prebuilt/km0_image2_all.bin km4_image2_all.bin > km0_km4_image2.bin
-#   ※ km0_image2_all.bin 은 4KB 경계 패딩된 상태여야 한다 (실측 확인)
+```
+  펌웨어      NU87-TINYDK  V260808R1   (페이로드 +32, addr 0x10005000)
+  배치        XIP (코드는 플래시에서 실행)
+  part1 xip     26488 B  load 0x0E000020  (__flash_text_start__)
+  part2 ram       688 B  load 0x10005000  (__ram_image2_text_start__)
+  km4_image2    27272 B
+  km0(스톡)    110592 B
+  최종 이미지  137864 B  -> km0_km4_image2.bin  (flash 0x08006000)
 ```
 
 플래싱 주소:
@@ -300,8 +429,12 @@ cat firm-sdk/prebuilt/km0_image2_all.bin km4_image2_all.bin > km0_km4_image2.bin
 | `build/km0_km4_image2.bin` | `0x08006000` (OTA1) |
 
 > **원시 `.bin`/`.elf`를 `0x08000000`에 그냥 구울 수는 없다.** ROM/부트로더가 32바이트
-> 헤더(시그니처+길이+로드주소)를 요구한다. 다만 **SRAM 배치 이미지는 SWD/GDB `load`로
-> 직접 올려 디버깅할 수 있다** — 반복 개발에는 이게 훨씬 빠르다.
+> 헤더(시그니처+길이+로드주소)를 요구한다.
+>
+> **XIP 배치에서는 SWD 로 플래시를 쓸 수 없다.** OpenOCD 에 RTL872x flash bank 드라이버가
+> 없어서 `load` 가 실패하고, XIP 영역 쓰기는 D-캐시만 오염시켜 타깃이 불안정해진다
+> (실측: `Load failed` -> `target not halted`, 리셋으로 복구). UART 로 굽는다.
+> SRAM 배치 이미지는 GDB `load` 로 직접 올려 디버깅할 수 있다.
 
 ## 6.8 참고 — 보안 기능 (현재 미사용)
 
