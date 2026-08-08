@@ -82,7 +82,7 @@ __attribute__((weak)) int _write(int file, char *ptr, int len)
 {
   (void)file;
 
-  uartWrite(HW_UART_CH_SWD, (uint8_t *)ptr, len);
+  uartWrite(HW_UART_CH_LOG, (uint8_t *)ptr, len);
   return len;
 }
 

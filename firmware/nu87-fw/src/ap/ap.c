@@ -1,12 +1,10 @@
 #include "ap.h"
-#include "iperf.h"
-
 
 
 
 
 void apInit(void)
-{  
+{
   moduleInit();
 }
 
@@ -21,8 +19,8 @@ void apMain(void)
 void updateLED(void)
 {
   static uint32_t pre_time = 0;
-  
-  
+
+
   if (millis() - pre_time >= 500)
   {
     pre_time = millis();
@@ -32,9 +30,7 @@ void updateLED(void)
 
 void update(void const *arg)
 {
-  eventUpdate();
-  wiznetUpdate();  
-  updateLED();    
+  updateLED();
 }
 
 void cliLoopIdle(void)

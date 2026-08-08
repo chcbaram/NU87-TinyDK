@@ -1,16 +1,12 @@
 /*
- * platform_autoconf.h — NU87-TinyDK (RTL8720DF / Ameba-D KM4)
+ * platform_autoconf.h — Ameba-D SDK 빌드 설정 (NU87-TinyDK / KM4)
  *
- * SDK 원본은 menuconfig 산출물이다 (src/lib/Realtek/inc_hp/platform_autoconf.h, 211줄).
- * 우리는 그것을 쓰지 않고 이 파일로 대체한다. 이유:
- *   - 벤더 예제 설정은 WiFi / lwIP / mbedTLS / SDIO 를 전부 켜서
- *     1단계 bare-metal 빌드에 불필요한 의존성을 끌어온다
- *     (예: rtl8721d_ota.h 가 HTTPS_OTA_UPDATE 때문에 mbedtls/version.h 를 요구)
- *   - 설정은 우리 계층에 있어야 한다. STM32 프로젝트가 stm32h5xx_hal_conf.h 를
- *     src/bsp/device/ 에 두었던 것과 같은 자리다.
+ * SDK 헤더들이 조건부 컴파일에 쓰는 CONFIG_* 매크로를 정의한다.
+ * rtl8721d.h 가 최상단에서 이 파일을 include 한다.
  *
- * 원본과 대조하려면 src/lib/Realtek/inc_hp/platform_autoconf.h 를 볼 것.
- * (그 디렉토리는 참조용이며 include 경로에 넣지 않는다)
+ * SDK 예제의 동명 파일(firm-sdk/lib/Realtek/inc_hp/)은 menuconfig 산출물로
+ * WiFi / lwIP / mbedTLS / SDIO 를 전부 켜므로 쓰지 않는다. 그 디렉토리는
+ * 대조용이며 include 경로에 넣지 않는다.
  */
 #ifndef _PLATFORM_AUTOCONF_H_
 #define _PLATFORM_AUTOCONF_H_
@@ -43,17 +39,15 @@
 #undef  CONFIG_ENABLE_RDP
 
 /* ── RTOS ────────────────────────────────────────────────────────────── */
-/* 1단계는 bare-metal 이다. ap 계층이 while(1) moduleUpdate() 로 돈다.
- * 무선 단계에서 FreeRTOS 로 전환할 때 아래 세 줄을 되살린다:
- *   #define CONFIG_KERNEL 1
- *   #define PLATFORM_FREERTOS 1
- *   #define TASK_SCHEDULER_DISABLED (0)
- * fwlib 안에서 이 매크로를 보는 곳은 basic_types.h 와 ameba_soc.h 두 곳뿐이다. */
+/* bare-metal 구성. ap 계층이 while(1) moduleUpdate() 로 돈다.
+ * FreeRTOS 를 쓰려면 CONFIG_KERNEL / PLATFORM_FREERTOS 를 정의하고
+ * TASK_SCHEDULER_DISABLED 를 0 으로 바꾼다. fwlib 에서 이 매크로를 보는 곳은
+ * basic_types.h 와 ameba_soc.h 두 곳이다. */
 #undef  CONFIG_KERNEL
 #undef  PLATFORM_FREERTOS
 #define TASK_SCHEDULER_DISABLED     (1)
 
-/* ── 무선 (1단계 off) ────────────────────────────────────────────────── */
+/* ── 무선 (미사용) ───────────────────────────────────────────────────── */
 #undef  CONFIG_WIFI_EN
 #undef  CONFIG_WIFI_NORMAL
 #undef  CONFIG_WIFI_MODULE
@@ -61,7 +55,7 @@
 #undef  CONFIG_BT_EN
 #undef  CONFIG_BT
 
-/* ── 암호화 (1단계 off) ──────────────────────────────────────────────── */
+/* ── 암호화 (미사용) ─────────────────────────────────────────────────── */
 #undef  CONFIG_USE_MBEDTLS_ROM
 #undef  CONFIG_MBED_TLS_ENABLED
 
@@ -78,9 +72,8 @@
 #define CONFIG_DEBUG_LOG            1
 
 /* ── 툴체인 / 링크 ───────────────────────────────────────────────────── */
-/* 표준 Arm GNU Toolchain 을 쓴다 (벤더 asdk 아님).
- * 이 두 매크로는 SDK Makefile 에서만 쓰이고 C 코드에는 영향이 없으나
- * 의도를 명시해 둔다. */
+/* 표준 Arm GNU Toolchain 을 쓴다. 이 두 매크로는 SDK Makefile 에서만 쓰이고
+ * C 코드에는 영향이 없으나 의도를 명시해 둔다. */
 #undef  CONFIG_TOOLCHAIN_ASDK
 #define CONFIG_TOOLCHAIN_ARM_GCC    1
 

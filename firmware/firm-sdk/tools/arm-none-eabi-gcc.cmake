@@ -75,14 +75,26 @@ endif()
 
 message(STATUS "arm-none-eabi-gcc ${NU87_GCC_VERSION} (>= ${NU87_GCC_MIN_VERSION}) : ${ARM_TOOLCHAIN_DIR}")
 
-# ── 멀티립 확인 ─────────────────────────────────────────────────────────────
+# ── 아키텍처 / 멀티립 ───────────────────────────────────────────────────────
 # ROM 코드와 ABI 가 맞아야 한다. Realtek 은
 #   -march=armv8-m.main+dsp + arm-none-eabi/lib/v8-m.main/fpu/fpv5-sp-d16
 # 으로 링크한다. 표준 툴체인에서 대응하는 멀티립은 thumb/v8-m.main+fp/hard 다.
-set(NU87_ARCH_FLAGS -mcpu=cortex-m33 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=hard)
+#
+# 멀티립 판정에는 아래 4 개만 쓴다. -mcmse 는 멀티립을 바꾸지 않지만
+# 판정 기준을 단순하게 유지하려고 분리한다.
+set(NU87_ARCH_BASE -mcpu=cortex-m33 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=hard)
+
+# 실제 컴파일/링크에 쓰는 플래그.
+#
+# -mcmse 가 필수다. TrustZone 을 쓰지 않아도 SDK 헤더가 CMSE 인트린식에 의존한다:
+#   basic_types.h:520        __attribute__((cmse_nonsecure_call))
+#   rtl8721d_trustzone.h:88  cmse_address_info.flags.secure
+# 이 옵션이 없으면 arm_cmse.h 의 구조체에 secure 멤버가 없어 컴파일이 깨진다.
+#   error: 'struct cmse_address_info' has no member named 'secure'
+set(NU87_ARCH_FLAGS ${NU87_ARCH_BASE} -mcmse)
 
 execute_process(
-  COMMAND "${ARM_TOOLCHAIN_DIR}" -print-multi-directory ${NU87_ARCH_FLAGS}
+  COMMAND "${ARM_TOOLCHAIN_DIR}" -print-multi-directory ${NU87_ARCH_BASE}
   OUTPUT_VARIABLE NU87_MULTILIB
   OUTPUT_STRIP_TRAILING_WHITESPACE
   ERROR_QUIET

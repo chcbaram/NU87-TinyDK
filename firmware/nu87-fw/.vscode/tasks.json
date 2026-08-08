@@ -1,23 +1,25 @@
 {
-	"version": "2.0.0",
+  "version": "2.0.0",
   "tasks": [
     {
       "label": "build-configure",
       "type": "shell",
-      "windows":{
-        "command": "cmake -S . -B build -G 'MinGW Makefiles'" ,
+      "windows": {
+        "command": "cmake -S . -B build -G 'MinGW Makefiles'"
       },
       "command": "cmake -S . -B build",
       "problemMatcher": []
-    },  
+    },
     {
       "label": "build-build",
       "type": "shell",
-      "windows":{
-        "command": "cmake -S . -B build -G 'MinGW Makefiles'; cmake --build build -j20",
+      "windows": {
+        "command": "cmake -S . -B build -G 'MinGW Makefiles'; cmake --build build -j20"
       },
-      "command": "cmake -S . -B build; cmake --build build -j20",    
-      "problemMatcher": [],
+      "command": "cmake -S . -B build; cmake --build build -j20",
+      "problemMatcher": [
+        "$gcc"
+      ],
       "group": {
         "kind": "build",
         "isDefault": true
@@ -27,8 +29,124 @@
       "label": "build-clean",
       "type": "shell",
       "command": "cmake --build build --target clean",
-      "problemMatcher": [],
-    }, 
+      "problemMatcher": []
+    },
+    {
+      "label": "build-rebuild",
+      "type": "shell",
+      "detail": "build 디렉토리를 지우고 처음부터 빌드한다",
+      "windows": {
+        "command": "if (Test-Path build) { Remove-Item -Recurse -Force build }; cmake -S . -B build -G 'MinGW Makefiles'; cmake --build build -j20"
+      },
+      "command": "rm -rf build; cmake -S . -B build; cmake --build build -j20",
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
 
+    // ── 플래싱 ──────────────────────────────────────────────────────────
+    {
+      "label": "flash",
+      "type": "shell",
+      "detail": "CP2102N UART 다운로드로 플래시에 굽는다 (영구)",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin"
+      },
+      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin",
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-full",
+      "type": "shell",
+      "detail": "부트로더까지 포함해 전체를 굽는다 (복구용)",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin --with-boot"
+      },
+      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin --with-boot",
+      "problemMatcher": []
+    },
+    {
+      "label": "load-sram",
+      "type": "shell",
+      "detail": "SWD 로 SRAM 에 직접 올려 실행한다 (플래시를 건드리지 않음, 반복 개발용)",
+      "dependsOn": "build-build",
+      "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'targets rtl872xd.km4' -c halt -c 'load_image build/nu87-fw.elf' -c 'reg msp 0x10005000' -c 'nu87_run_image' -c resume -c shutdown",
+      "problemMatcher": []
+    },
+
+    // ── 콘솔 / 디버깅 ───────────────────────────────────────────────────
+    {
+      "label": "monitor",
+      "type": "shell",
+      "detail": "LOGUART 콘솔 (115200). DTR/RTS 를 끄지 않으면 보드가 리셋된다",
+      "windows": {
+        "command": "python -m serial.tools.miniterm --rts 0 --dtr 0 ${input:serialPort} 115200"
+      },
+      "command": "python3 -m serial.tools.miniterm --rts 0 --dtr 0 ${input:serialPort} 115200",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "openocd",
+      "type": "shell",
+      "detail": "OpenOCD GDB 서버 (KM0 :3333 / KM4 :3334)",
+      "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+
+    // ── 유틸 ────────────────────────────────────────────────────────────
+    {
+      "label": "flash-backup",
+      "type": "shell",
+      "detail": "SWD 로 플래시 4MB 전체를 백업한다 (약 2분)",
+      "windows": {
+        "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'nu87_backup ../backup/flash_backup.bin' -c shutdown"
+      },
+      "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'nu87_backup ../backup/flash_backup.bin' -c shutdown",
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-info",
+      "type": "shell",
+      "detail": "플래시의 이미지 헤더 체인을 확인한다",
+      "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c nu87_imginfo -c shutdown",
+      "problemMatcher": []
+    },
+    {
+      "label": "size",
+      "type": "shell",
+      "detail": "섹션별 크기와 SRAM 사용량",
+      "command": "arm-none-eabi-size -A build/nu87-fw.elf",
+      "problemMatcher": []
+    },
+    {
+      "label": "sdk-sync",
+      "type": "shell",
+      "detail": "SDK 서브모듈에서 firm-sdk/lib/Realtek/ 로 재동기화한다",
+      "windows": {
+        "command": "python ../firm-sdk/tools/sync_sdk.py"
+      },
+      "command": "python3 ../firm-sdk/tools/sync_sdk.py",
+      "problemMatcher": []
+    }
+  ],
+
+  "inputs": [
+    {
+      "id": "serialPort",
+      "type": "promptString",
+      "description": "시리얼 포트 (macOS: /dev/cu.usbserial-0001, Linux: /dev/ttyUSB0, Windows: COM3)",
+      "default": "/dev/cu.usbserial-0001"
+    }
   ]
 }

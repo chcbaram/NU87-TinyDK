@@ -1,212 +1,122 @@
+/*
+ * bsp.c — 플랫폼 시작과 시간 기반 (RTL8720DF / KM4)
+ *
+ * ap / common 계층은 이 파일이 제공하는 API 만 보고, Realtek SDK 심볼은 여기서 끝난다.
+ *
+ * 시간 기반은 SysTick 1kHz 하나로 만든다.
+ *   millis()  SysTick 인터럽트가 올리는 카운터. 같은 인터럽트로 swtimer(1kHz)도 구동한다.
+ *   micros()  ms 카운터 + SysTick 감소 카운터를 보간한다.
+ */
+
 #include "bsp.h"
-#include "hw_def.h"
 #include "cli.h"
-
-static void mpuInit(void);
-static void SystemClock_Config(void);
-static DCACHE_HandleTypeDef hdcache1;
+#include "swtimer.h"
 
 
+static volatile uint32_t bsp_tick_ms = 0;
+static uint32_t          bsp_cpu_hz  = 0;
+static uint32_t          bsp_us_div  = 1;   /* SysTick 카운트 → us 변환용 (cpu_hz / 1MHz) */
 
 
-bool bspInit(void)
+static void bspSysTickHandler(void)
 {
-  bool ret = true;
+  bsp_tick_ms++;
 
-
-  #ifdef _USE_HW_CACHE
-  SCB_EnableICache();
-  SCB_EnableDCache();
-  #endif  
-
-  HAL_Init();
-
-
-  SystemClock_Config();
-
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-
-
-  HAL_ICACHE_Enable();
-
-  hdcache1.Instance = DCACHE1;
-  hdcache1.Init.ReadBurstType = DCACHE_READ_BURST_WRAP;
-  if (HAL_DCACHE_Init(&hdcache1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  mpuInit();
-
-  return ret;
-}
-
-void delay(uint32_t ms)
-{
-#ifdef _USE_HW_RTOS
-  if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-  {
-    osDelay(ms);
-  }
-  else
-  {
-    HAL_Delay(ms);
-  }
-#else
-  uint32_t tickstart = millis();
-  uint32_t wait      = ms;
-
-  /* Add a freq to guarantee minimum wait */
-  if (wait < HAL_MAX_DELAY)
-  {
-    wait += (uint32_t)(uwTickFreq);
-  }
-
-  while ((millis() - tickstart) < wait)
-  {
-    cliLoopIdle();
-  }
+#ifdef _USE_HW_SWTIMER
+  swtimerISR();
 #endif
 }
 
-void delayUs(uint32_t delay_us)
+bool bspInit(void)
 {
-  uint32_t pre_time = micros();
-  
-  while(micros()-pre_time <= delay_us)
+  /* 캐시·클럭·MPU·벡터테이블은 진입점(nu87_app_start.c)이 이미 설정했다.
+   * 여기서는 시간 기반과 인터럽트만 세운다. */
+
+  SystemCoreClockUpdate();
+  bsp_cpu_hz = SystemGetCpuClk();
+  if (bsp_cpu_hz == 0)
   {
-    //
-  } 
+    bsp_cpu_hz = PLATFORM_CLOCK;      /* 조회 실패 시 설정값(200MHz) 사용 */
+  }
+  bsp_us_div = bsp_cpu_hz / 1000000U;
+  if (bsp_us_div == 0)
+  {
+    bsp_us_div = 1;
+  }
+
+  /* SysTick 1kHz.
+   * CMSIS 의 SysTick_Config() 는 __Vendor_SysTickConfig 설정 때문에 제공되지 않으므로
+   * 레지스터를 직접 쓴다.
+   * app_start() 에서 irq_table_init() 을 했으므로 벡터 설정이 동작한다. */
+  __NVIC_SetVector(SysTick_IRQn, (uint32_t)(void *)bspSysTickHandler);
+  NVIC_SetPriority(SysTick_IRQn, (1UL << __NVIC_PRIO_BITS) - 1UL);
+
+  SysTick->LOAD = (bsp_cpu_hz / 1000U) - 1U;
+  SysTick->VAL  = 0U;
+  SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk    /* 프로세서 클럭 */
+                | SysTick_CTRL_TICKINT_Msk
+                | SysTick_CTRL_ENABLE_Msk;
+
+  /* KM4 부트로더는 PRIMASK=1 (인터럽트 전체 마스킹) 상태로 이미지에 진입한다.
+   * 여기서 풀어야 SysTick 을 비롯한 모든 인터럽트가 동작한다. */
+  __enable_irq();
+
+  return true;
 }
 
 uint32_t millis(void)
 {
-  return HAL_GetTick();
+  return bsp_tick_ms;
 }
 
 uint32_t micros(void)
 {
-  uint32_t       m0  = millis();
-  __IO uint32_t  u0  = SysTick->VAL;
-  uint32_t       m1  = millis();
-  __IO uint32_t  u1  = SysTick->VAL;
-  const uint32_t tms = SysTick->LOAD + 1;
+  uint32_t ms;
+  uint32_t val;
 
-  if (m1 != m0)
+  /* SysTick 카운터는 리로드값에서 0 으로 감소한다.
+   * 틱 경계에서 ms 와 VAL 이 어긋나는 것을 막으려고 두 번 읽어 비교한다. */
+  do
   {
-    return (m1 * 1000 + ((tms - u1) * 1000) / tms);
-  }
-  else
+    ms  = bsp_tick_ms;
+    val = SysTick->VAL;
+  } while (ms != bsp_tick_ms);
+
+  return (ms * 1000U) + ((SysTick->LOAD - val) / bsp_us_div);
+}
+
+void delayUs(uint32_t delay_us)
+{
+  /* ROM 의 캘리브레이션된 busy-wait */
+  DelayUs(delay_us);
+}
+
+void delay(uint32_t time_ms)
+{
+  uint32_t pre_time = millis();
+
+  /* 대기하는 동안 CLI 를 계속 돌려 블로킹 delay 안에서도 콘솔이 살아 있게 한다.
+   *
+   * 주의: cliLoopIdle() 이 moduleUpdate() 를 호출하므로 모듈 그래프가 재진입한다.
+   * delay() 를 호출하는 모듈 update 는 자신이 다시 불릴 수 있음을 전제해야 한다. */
+  while (millis() - pre_time < time_ms)
   {
-    return (m0 * 1000 + ((tms - u0) * 1000) / tms);
+#ifdef _USE_HW_CLI
+    cliLoopIdle();
+#endif
   }
 }
 
 void Error_Handler(void)
 {
-  if (CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk)  
-  { 
+  /* 디버거가 붙어 있으면 여기서 멈춘다 */
+  if (CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk)
+  {
     __BKPT(0);
   }
-    
-  /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+
   __disable_irq();
   while (1)
   {
   }
-  /* USER CODE END Error_Handler_Debug */
-}
-
-void SystemClock_Config(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-
-  /** Configure the main internal regulator output voltage
-  */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
-
-  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
-
-  /** Configure LSE Drive Capability
-  *  Warning : Only applied when the LSE is disabled.
-  */
-  HAL_PWR_EnableBkUpAccess();
-  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
-
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_LSE
-                              |RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
-  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLL1_SOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 2;
-  RCC_OscInitStruct.PLL.PLLN = 40;
-  RCC_OscInitStruct.PLL.PLLP = 2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
-  RCC_OscInitStruct.PLL.PLLR = 2;
-  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1_VCIRANGE_3;
-  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1_VCORANGE_WIDE;
-  RCC_OscInitStruct.PLL.PLLFRACN = 0;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
-                              |RCC_CLOCKTYPE_PCLK3;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB3CLKDivider = RCC_HCLK_DIV1;
-
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure the programming delay
-  */
-  __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_2);
-}
-
-static void mpuInit(void)
-{
-  MPU_Region_InitTypeDef MPU_InitStruct;
-  MPU_Attributes_InitTypeDef   MPU_AttributesInit;
-
-  /* Disable MPU before perloading and config update */
-  HAL_MPU_Disable();
-
-  /* Define cacheable memory via MPU */
-  MPU_AttributesInit.Number             = MPU_ATTRIBUTES_NUMBER0;
-  MPU_AttributesInit.Attributes         = MPU_NOT_CACHEABLE;
-  HAL_MPU_ConfigMemoryAttributes(&MPU_AttributesInit);
-
-  /* Configure FLASH region as REGION Number 0 */
-  MPU_InitStruct.Enable           = MPU_REGION_ENABLE;
-  MPU_InitStruct.Number           = MPU_REGION_NUMBER0;
-  MPU_InitStruct.AttributesIndex  = MPU_ATTRIBUTES_NUMBER0;
-  MPU_InitStruct.BaseAddress      = (uint32_t) 0x08FFF800;
-  MPU_InitStruct.LimitAddress     = (uint32_t) 0x08FFF80C;
-  MPU_InitStruct.AccessPermission = MPU_REGION_ALL_RO;
-  MPU_InitStruct.DisableExec      = MPU_INSTRUCTION_ACCESS_ENABLE;
-  MPU_InitStruct.IsShareable      = MPU_ACCESS_NOT_SHAREABLE;
-
-  HAL_MPU_ConfigRegion(&MPU_InitStruct);
-
-  /* Enable the MPU */
-  HAL_MPU_Enable(MPU_HFNMI_PRIVDEF);
 }

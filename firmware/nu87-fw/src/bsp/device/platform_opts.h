@@ -22,7 +22,7 @@
 #define CONFIG_INTERACTIVE_EXT      0
 #define CONFIG_ATCMD_MP             0
 
-/* ── 네트워크 계층 (1단계 off) ───────────────────────────────────────── */
+/* ── 네트워크 계층 (미사용) ──────────────────────────────────────────── */
 #define CONFIG_WLAN                 0
 #define CONFIG_LWIP_LAYER           0
 #define CONFIG_INIT_NET             0
@@ -30,16 +30,15 @@
 
 /* ── OTA ─────────────────────────────────────────────────────────────── */
 /* HTTP_OTA_UPDATE / HTTPS_OTA_UPDATE 를 정의하면 rtl8721d_ota.h 가
- * mbedtls/version.h, mbedtls/ssl.h 등을 요구한다. 1단계에서는 정의하지 않는다.
- * 우리 업데이트 경로는 common/hw/include/cmd.h 의 cmd_driver_t 추상화를
- * 통해 UART / WiFi / BLE 전송으로 구현할 예정이다. (docs/12-bootloader-ota.md) */
+ * mbedtls/version.h, mbedtls/ssl.h 를 요구한다. 켤 때는 sdk_manifest.txt 에
+ * mbedtls include 디렉토리도 추가해야 한다. */
 #define CONFIG_OTA_UPDATE           0
 #undef  HTTP_OTA_UPDATE
 #undef  HTTPS_OTA_UPDATE
 #undef  SDCARD_OTA_UPDATE
 #define CONFIG_UART_XMODEM          0
 
-/* ── 파일시스템 (1단계 off) ──────────────────────────────────────────── */
+/* ── 파일시스템 (미사용) ─────────────────────────────────────────────── */
 #undef  CONFIG_FTL_ENABLED
 #define CONFIG_FATFS_EN             0
 

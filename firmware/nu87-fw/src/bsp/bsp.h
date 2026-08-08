@@ -6,21 +6,25 @@ extern "C" {
 #endif
 
 #include "def.h"
-#include "stm32h5xx_hal.h"
+
+/* 벤더 SDK umbrella. 이 헤더를 통해서만 Realtek 심볼이 들어온다.
+ * hw/driver 와 bsp 안에서만 보여야 하고, ap/common 으로 새면 안 된다. */
+#include "ameba_soc.h"
+#include "rtl8721d_system.h"
 
 
+/* log.c 가 제공한다. log.h 를 include 하면 순환 의존이 생기므로 선언만 둔다. */
 void logPrintf(const char *fmt, ...);
 
 
+bool     bspInit(void);
 
-bool bspInit(void);
-
-void delay(uint32_t time_ms);
-void delayUs(uint32_t delay_us);
+void     delay(uint32_t time_ms);
+void     delayUs(uint32_t delay_us);
 uint32_t millis(void);
 uint32_t micros(void);
 
-void Error_Handler(void);
+void     Error_Handler(void);
 
 
 #ifdef __cplusplus

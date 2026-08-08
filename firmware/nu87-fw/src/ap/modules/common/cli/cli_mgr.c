@@ -1,10 +1,7 @@
 #include "cli_mgr.h"
-#include "driver/cli_net.h"
 
 
 #ifdef _USE_HW_CLI
-
-void cliThread(void const *arg);
 
 
 static uint8_t  cli_ch    = HW_UART_CH_CLI;
@@ -15,10 +12,8 @@ static bool     is_enable = true;
 
 bool cliMgrInit(void)
 {
-  cliNetInit(23);
-
   cliOpen(cli_ch, cli_baud);
-  cliBegin();  
+  cliBegin();
   return true;
 }
 
@@ -33,28 +28,10 @@ void cliMgrThread(void const *arg)
   {
     cliMain();
   }
-
-  cliNetPoll();
-  if (cliNetIsConnected())
-  {
-    cli_ch = HW_UART_CH_NET;
-  }
-  else if (cli_ch == HW_UART_CH_NET)
-  {
-    cli_ch = HW_UART_CH_CLI;
-  }
-
-  if (uartAvailable(HW_UART_CH_CLI))
-  {
-    cli_ch = HW_UART_CH_CLI;
-  }
-
-  if (cliGetPort() != cli_ch)
-  {
-    cliOpen(cli_ch, cli_baud);
-    logOpen(cli_ch, cli_baud);
-  }
 }
+
+/* CLI 포트는 LOGUART 하나다. 포트가 늘어나면 이 모듈이 cliGetPort() 와 비교해
+ * cliOpen()/logOpen() 으로 전환하는 역할을 맡는다. */
 
 MODULE_DEF(cli){
   .name     = "cli",

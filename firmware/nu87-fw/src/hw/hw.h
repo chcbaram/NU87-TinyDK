@@ -12,18 +12,9 @@ extern "C" {
 #include "uart.h"
 #include "cli.h"
 #include "log.h"
-#include "fault.h"
 #include "swtimer.h"
-#include "reset.h"
-#include "rtc.h"
-#include "qbuffer.h"
-#include "usb.h"
-#include "cdc.h"
-#include "gpio.h"
-#include "wiz_spi.h"
-#include "wiznet/wiznet.h"
 #include "event.h"
-#include "osal/thread.h"
+#include "qbuffer.h"
 
 
 bool hwInit(void);

@@ -1,31 +1,66 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
     {
-      "cwd": "${workspaceRoot}",
-      "executable": "./build/stm32h5-w6300-fw.elf",
-      "name": "Debug with STLINK",
+      "name": "Attach KM4 (OpenOCD)",
+      "cwd": "${workspaceFolder}",
+      "executable": "./build/nu87-fw.elf",
+      "request": "attach",
+      "type": "cortex-debug",
+      "servertype": "openocd",
+      "configFiles": [
+        "../firm-sdk/tools/openocd/nu87.cfg"
+      ],
+      "targetId": "rtl872xd.km4",
+      "gdbPath": "arm-none-eabi-gdb",
+      "showDevDebugOutput": "none",
+      "breakAfterReset": false,
+      "postAttachCommands": [
+        "monitor targets rtl872xd.km4"
+      ]
+    },
+    {
+      "name": "Load to SRAM & Run KM4",
+      "cwd": "${workspaceFolder}",
+      "executable": "./build/nu87-fw.elf",
       "request": "launch",
       "type": "cortex-debug",
-      "showDevDebugOutput": "none",      
-      "servertype": "stlink",
-      "serverArgs": [
-        "-m","1",       
-      ],      
-      "osx": {
-        "serverpath": "/opt/ST/STM32CubeCLT_1.16.0/STLink-gdb-server/bin/ST-LINK_gdbserver",
-        "stm32cubeprogrammer": "/opt/ST/STM32CubeCLT_1.16.0/STM32CubeProgrammer/bin",
-        "svdFile": "/opt/ST/STM32CubeCLT_1.16.0/STMicroelectronics_CMSIS_SVD/STM32H562.svd"
-      },       
-      "windows": {
-        "serverpath": "C:/ST/STM32CubeCLT_1.18.0/STLink-gdb-server/bin/ST-LINK_gdbserver.exe",
-        "stm32cubeprogrammer": "C:/ST/STM32CubeCLT_1.18.0/STM32CubeProgrammer/bin",
-        "svdFile": "C:/ST/STM32CubeCLT_1.18.0/STMicroelectronics_CMSIS_SVD/STM32H562.svd"
-      },       
-      "runToEntryPoint": "main",  
-    }   
+      "servertype": "openocd",
+      "configFiles": [
+        "../firm-sdk/tools/openocd/nu87.cfg"
+      ],
+      "targetId": "rtl872xd.km4",
+      "gdbPath": "arm-none-eabi-gdb",
+      "showDevDebugOutput": "none",
+      "preLaunchTask": "build-build",
+      "overrideLaunchCommands": [
+        "monitor targets rtl872xd.km4",
+        "monitor halt",
+        "load",
+        "monitor reg msp 0x10005000",
+        "monitor nu87_run_image"
+      ],
+      "overrideRestartCommands": [
+        "monitor halt",
+        "load",
+        "monitor reg msp 0x10005000",
+        "monitor nu87_run_image"
+      ],
+      "runToEntryPoint": "main"
+    },
+    {
+      "name": "Attach KM0 (OpenOCD)",
+      "cwd": "${workspaceFolder}",
+      "executable": "./build/nu87-fw.elf",
+      "request": "attach",
+      "type": "cortex-debug",
+      "servertype": "openocd",
+      "configFiles": [
+        "../firm-sdk/tools/openocd/nu87.cfg"
+      ],
+      "targetId": "rtl872xd.km0",
+      "gdbPath": "arm-none-eabi-gdb",
+      "showDevDebugOutput": "none"
+    }
   ]
 }

@@ -2,31 +2,25 @@
 #define HW_DEF_H_
 
 
-
 #include "bsp.h"
 #include "assert_def.h"
 
 
-#define _DEF_FIRMWATRE_VERSION    "V251024R1"
-#define _DEF_BOARD_NAME           "STM32H5-W6300-FW"
+#define _DEF_FIRMWATRE_VERSION    "V260808R1"
+#define _DEF_BOARD_NAME           "NU87-TINYDK"
 
 
-
+//-- HW
+//
 #define _USE_HW_ASSERT
-#define _USE_HW_FAULT
-#define _USE_HW_WIZSPI
-
 
 #define _USE_HW_LED
-#define      HW_LED_MAX_CH          1
+#define      HW_LED_MAX_CH          3      // _DEF_LED1=RED, _DEF_LED2=GREEN, _DEF_LED3=BLUE
 
 #define _USE_HW_UART
-#define      HW_UART_MAX_CH         3
-#define      HW_UART_CH_SWD         _DEF_UART1
-#define      HW_UART_CH_USB         _DEF_UART2
-#define      HW_UART_CH_NET         _DEF_UART3
-#define      HW_UART_CH_CLI         HW_UART_CH_SWD
-
+#define      HW_UART_MAX_CH         1
+#define      HW_UART_CH_LOG         _DEF_UART1   // LOGUART (PA7 TX / PA8 RX) -> CP2102N
+#define      HW_UART_CH_CLI         HW_UART_CH_LOG
 
 #define _USE_HW_CLI
 #define      HW_CLI_CMD_LIST_MAX    32
@@ -39,37 +33,28 @@
 #define      HW_CLI_GUI_HEIGHT      24
 
 #define _USE_HW_LOG
-#define      HW_LOG_CH              HW_UART_CH_SWD
+#define      HW_LOG_CH              HW_UART_CH_LOG
 #define      HW_LOG_BOOT_BUF_MAX    2048
 #define      HW_LOG_LIST_BUF_MAX    4096
 
 #define _USE_HW_SWTIMER
 #define      HW_SWTIMER_MAX_CH      16
 
-#define _USE_HW_RESET
-#define      HW_RESET_BOOT          1
-
-#define _USE_HW_RTC
-#define      HW_RTC_BOOT_MODE       RTC_BKP_DR3
-#define      HW_RTC_RESET_BITS      RTC_BKP_DR4
-
-#define _USE_HW_GPIO
-#define      HW_GPIO_MAX_CH         GPIO_PIN_MAX
-
-#define _USE_HW_USB
-#define _USE_HW_CDC
-#define      HW_USE_CDC             1
-#define      HW_USE_MSC             0
-
+/* 이벤트 pub/sub. ap/modules/module.h 의 module_t 가 event_func_t 를 필드로
+ * 갖고 있어 모듈 레지스트리를 쓰는 한 이 스위치가 필요하다. */
 #define _USE_HW_EVENT
 #define      HW_EVENT_Q_MAX         8
-#define      HW_EVENT_NODE_MAX      16  
+#define      HW_EVENT_NODE_MAX      16
 
-#define _USE_HW_WIZNET
-#define      HW_WIZNET_SOCKET_CMD   0
-#define      HW_WIZNET_SOCKET_DHCP  1
-#define      HW_WIZNET_SOCKET_SNTP  2
-#define      HW_WIZNET_SOCKET_TCP   3
+/* GPIO 미사용.
+ *
+ * 보드의 두 버튼은 GPIO 로 쓸 수 없다:
+ *   SW1 = PA7   LOGUART_TX 와 공유이고 UART_DOWNLOAD 부팅 스트랩이다.
+ *               콘솔을 쓰는 동안 입력으로 읽을 수 없다.
+ *   SW3 = PA27  SWDIO 와 공유. 파워온 시 Low 면 부팅에 실패한다.
+ *
+ * P1/P2 헤더 핀(PA15, PB2 등)을 쓰게 되면 _USE_HW_GPIO 와 GpioPinName_t 를
+ * 여기에 추가하고 hw/driver/gpio.c 를 작성한다. */
 
 
 //-- CLI
@@ -77,16 +62,5 @@
 #define _USE_CLI_HW_LOG             1
 #define _USE_CLI_HW_ASSERT          1
 #define _USE_CLI_HW_UART            1
-#define _USE_CLI_HW_USB             1
-#define _USE_CLI_HW_WIZNET          1
-
-
-typedef enum
-{
-  W6300_RST,
-  W6300_INT,
-  W6300_CS,
-  GPIO_PIN_MAX
-} GpioPinName_t;
 
 #endif
