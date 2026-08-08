@@ -96,14 +96,39 @@ set _CHIPNAME rtl872xd
 swj_newdap $_CHIPNAME cpu -irlen 4 -expected-id 0x6ba02477
 dap create $_CHIPNAME.dap -chain-position $_CHIPNAME.cpu
 
-target create $_CHIPNAME.km0 cortex_m -dap $_CHIPNAME.dap -ap-num 1 -gdb-port 3333
-target create $_CHIPNAME.km4 cortex_m -dap $_CHIPNAME.dap -ap-num 2 -gdb-port 3334
+target create $_CHIPNAME.km0 cortex_m -dap $_CHIPNAME.dap -ap-num 1
+target create $_CHIPNAME.km4 cortex_m -dap $_CHIPNAME.dap -ap-num 2
 
 gdb_breakpoint_override hard                 ;# OpenOCD 0.12는 밑줄 표기
 ```
 
 > `gdb breakpoint_override`(공백)는 0.13+ 문법이다. 0.12에서는
 > `Error: invalid command name "gdb"`가 나므로 **`gdb_breakpoint_override`**를 써야 한다.
+
+### ★ `-gdb-port` 를 고정하면 VS Code 디버깅이 안 된다
+
+지정하지 않은 타겟은 `gdb_port` 설정값부터 **생성 순서대로** 포트를 받는다.
+
+```
+생성 0번 KM0 -> gdb_port + 0
+생성 1번 KM4 -> gdb_port + 1
+```
+
+cortex-debug 는 설정 파일보다 **앞에** `-c "gdb_port N"` 을 붙이고 그 대역으로 접속한다.
+여기서 `-gdb-port` 로 고정하면 접속할 곳이 없어 이렇게 실패한다:
+
+```
+Info : starting gdb server for rtl872xd.km4 on 3334     ← OpenOCD 가 연 포트
+Failed to launch GDB: could not connect: Operation timed out.
+                     (from target-select extended-remote localhost:50000)
+```
+
+그래서 `-gdb-port` 를 쓰지 않는다. 결과:
+
+| 실행 방식 | KM0 | KM4 |
+|---|---|---|
+| 단독 (`gdb_port` 기본 3333) | 3333 | 3334 |
+| cortex-debug (`gdb_port 50000`) | 50000 | 50001 |
 
 CMSIS-DAP나 J-Link로 바꾸려면 첫 두 줄만 교체한다:
 ```tcl
@@ -185,6 +210,30 @@ arm-none-eabi-gdb build/nu87-fw.elf
 openocd -f firm-sdk/tools/openocd/nu87.cfg -c "init" -c "targets rtl872xd.km4" \
         -c "halt" -c "reg pc" -c "resume" -c "shutdown"
 ```
+
+### VS Code — `numberOfProcessors` / `targetProcessor`
+
+cortex-debug 는 `servertype: "openocd"` 일 때 포트를 **스스로 할당**한다.
+`gdbTarget` 은 `servertype: "external"` 전용이고, `targetId` 는 BMP/PyOCD 전용이라
+OpenOCD 에서는 무시된다. 멀티코어용 옵션은 이 둘이다:
+
+```jsonc
+"numberOfProcessors": 2,     // 포트를 코어 수만큼 확보한다
+"targetProcessor": 1,        // 몇 번째 코어에 붙을지. KM0=0, KM4=1
+```
+
+동작 방식은 이렇다. cortex-debug 는 `gdbPort`, `gdbPort1`, `tclPort`, `tclPort1`, …
+순으로 빈 포트를 잡고, OpenOCD 에 `gdb_port <gdbPort>` 를 넘긴 뒤
+`gdbPort<targetProcessor>` 로 접속한다. OpenOCD 가 타겟 생성 순서대로 포트를 배정하므로
+**cfg 의 `target create` 순서와 `targetProcessor` 번호가 그대로 대응**한다.
+
+`.vscode/launch.json` 의 세 가지:
+
+| 구성 | targetProcessor | 용도 |
+|---|---|---|
+| Attach KM4 (OpenOCD) | 1 | 실행 중인 펌웨어에 붙는다 |
+| Load to SRAM & Run KM4 | 1 | 빌드 → SRAM 로드 → `main` 까지 실행. 플래시를 건드리지 않는다 |
+| Attach KM0 (OpenOCD) | 0 | KM0 는 스톡 블롭이라 심볼이 없다. 멈춰 놓고 보는 용도 |
 
 ## 3.6 반드시 지킬 순서 — KM0 먼저
 

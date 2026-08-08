@@ -1,5 +1,11 @@
 {
   "version": "0.2.0",
+
+  // nu87.cfg 는 -gdb-port 를 고정하지 않는다. 타겟이 생성 순서대로 gdb_port 부터
+  // 포트를 받고, cortex-debug 는 targetProcessor 번째 포트로 접속한다.
+  //   targetProcessor 0 = KM0 (생성 0번)
+  //   targetProcessor 1 = KM4 (생성 1번)
+  // numberOfProcessors 를 2 로 둬야 cortex-debug 가 포트를 두 개 확보한다.
   "configurations": [
     {
       "name": "Attach KM4 (OpenOCD)",
@@ -11,13 +17,11 @@
       "configFiles": [
         "../firm-sdk/tools/openocd/nu87.cfg"
       ],
-      "targetId": "rtl872xd.km4",
+      "numberOfProcessors": 2,
+      "targetProcessor": 1,
       "gdbPath": "arm-none-eabi-gdb",
       "showDevDebugOutput": "none",
-      "breakAfterReset": false,
-      "postAttachCommands": [
-        "monitor targets rtl872xd.km4"
-      ]
+      "breakAfterReset": false
     },
     {
       "name": "Load to SRAM & Run KM4",
@@ -29,12 +33,12 @@
       "configFiles": [
         "../firm-sdk/tools/openocd/nu87.cfg"
       ],
-      "targetId": "rtl872xd.km4",
+      "numberOfProcessors": 2,
+      "targetProcessor": 1,
       "gdbPath": "arm-none-eabi-gdb",
       "showDevDebugOutput": "none",
       "preLaunchTask": "build-build",
       "overrideLaunchCommands": [
-        "monitor targets rtl872xd.km4",
         "monitor halt",
         "load",
         "monitor reg msp 0x10005000",
@@ -49,6 +53,7 @@
       "runToEntryPoint": "main"
     },
     {
+      // KM0 는 벤더 스톡 블롭이라 심볼이 없다. 멈춰 놓고 레지스터·메모리를 보는 용도다.
       "name": "Attach KM0 (OpenOCD)",
       "cwd": "${workspaceFolder}",
       "executable": "./build/nu87-fw.elf",
@@ -58,9 +63,11 @@
       "configFiles": [
         "../firm-sdk/tools/openocd/nu87.cfg"
       ],
-      "targetId": "rtl872xd.km0",
+      "numberOfProcessors": 2,
+      "targetProcessor": 0,
       "gdbPath": "arm-none-eabi-gdb",
-      "showDevDebugOutput": "none"
+      "showDevDebugOutput": "none",
+      "breakAfterReset": false
     }
   ]
 }
