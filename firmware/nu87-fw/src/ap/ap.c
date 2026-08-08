@@ -6,6 +6,10 @@
 void apInit(void)
 {
   moduleInit();
+
+#ifdef _USE_HW_THREAD
+  threadBegin();
+#endif
 }
 
 void apMain(void)
@@ -13,6 +17,9 @@ void apMain(void)
   while(1)
   {
     moduleUpdate();
+#ifdef _USE_HW_RTOS
+    delay(1);
+#endif
   }
 }
 
