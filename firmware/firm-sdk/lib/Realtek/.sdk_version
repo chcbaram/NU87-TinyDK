@@ -1,0 +1,6 @@
+# 자동 생성 — firm-sdk/tools/sync_sdk.py
+# 이 디렉토리의 내용이 어느 SDK 커밋에서 왔는지 기록한다.
+repo=https://github.com/Ameba-AIoT/ameba-rtos-d
+commit=7569200fb8304daa61a9f09ccf439ada38d6de2e
+date=2026-06-18
+patches=1

@@ -1,0 +1,52 @@
+Ameba-D SDK: rtl8721d_ota.h 의 OTA 전송 방식 선언을 opt-in 으로 바꾼다
+
+문제
+----
+fwlib/include/rtl8721d_ota.h 가 HTTP_OTA_UPDATE / HTTPS_OTA_UPDATE /
+SDCARD_OTA_UPDATE 를 아무 조건 없이 #define 한다. 그 결과 이 헤더를
+include 하는 모든 TU 가 mbedtls/version.h, mbedtls/ssl.h, FatFs 헤더를
+요구하게 된다.
+
+ameba_soc.h 가 rtl8721d_ota.h 를 무조건 include 하므로, ameba_soc.h 를
+쓰는 순간 mbedTLS 전체가 필요해진다. 1단계 bare-metal LED/CLI 빌드에는
+불필요한 의존성이다.
+
+    src/lib/Realtek/fwlib/include/rtl8721d_ota.h:173:10:
+        fatal error: mbedtls/version.h: No such file or directory
+
+해결
+----
+세 매크로를 CONFIG_OTA_HTTP / CONFIG_OTA_HTTPS / CONFIG_OTA_SDCARD 로
+감싼다. 기본값은 off 이고, 필요할 때 src/bsp/device/platform_opts.h 에서
+켠다. 켤 때는 sdk_manifest.txt 에 mbedtls include 디렉토리도 추가해야 한다.
+
+OTA 자체(ota_get_cur_index, 슬롯 전환 등)는 영향받지 않는다.
+전송 방식(HTTP/HTTPS/SD카드) 선언만 조건부가 된다.
+
+--- a/fwlib/include/rtl8721d_ota.h
++++ b/fwlib/include/rtl8721d_ota.h
+@@ -26,11 +26,22 @@
+ #define SERVER_CLOUD	2
+ #define SERVER_TYPE		SERVER_LOCAL						/*configure OTA demo type*/
+ #define MAX_IMG_NUM		2
+ 
+-#define HTTP_OTA_UPDATE	
+-#define HTTPS_OTA_UPDATE	
++/* NU87 로컬 패치 — tools/patches/0001-ota-header-make-transport-opt-in.patch
++ * 원본은 이 세 매크로를 무조건 정의해서 mbedTLS / FatFs 를 강제 의존하게 만든다.
++ * platform_opts.h 에서 CONFIG_OTA_* 를 켤 때만 활성화한다. */
++#if defined(CONFIG_OTA_HTTP) && (CONFIG_OTA_HTTP)
++#define HTTP_OTA_UPDATE
++#endif
++
++#if defined(CONFIG_OTA_HTTPS) && (CONFIG_OTA_HTTPS)
++#define HTTPS_OTA_UPDATE
++#endif
++
++#if defined(CONFIG_OTA_SDCARD) && (CONFIG_OTA_SDCARD)
+ #define SDCARD_OTA_UPDATE
++#endif
+ 
+ #if (defined HTTP_OTA_UPDATE) || (defined HTTPS_OTA_UPDATE)
+ 
+ #define HEADER_BAK_LEN			32
