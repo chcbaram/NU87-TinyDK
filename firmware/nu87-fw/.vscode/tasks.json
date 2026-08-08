@@ -1,6 +1,14 @@
 {
+  // 시리얼 포트 · 보레이트 · 파일 선택은 firmware-task 확장이 제공하는 명령을 쓴다.
+  //   firmware-task.pickSerialPort   연결된 포트를 목록에서 고른다
+  //   firmware-task.promptInput      값 입력 (기본값 / 정규식 검증 지원)
+  //   firmware-task.pickFile         파일 선택 다이얼로그
+  //
+  // 확장이 없으면 ${input:...} 이 해석되지 않아 해당 태스크가 실패한다.
+  // 그런 경우 "· 자동" 이 붙은 태스크를 쓰면 된다. 포트를 스크립트가 직접 찾는다.
   "version": "2.0.0",
   "tasks": [
+    // ── 빌드 ────────────────────────────────────────────────────────────
     {
       "label": "build-configure",
       "type": "shell",
@@ -34,7 +42,7 @@
     {
       "label": "build-rebuild",
       "type": "shell",
-      "detail": "build 디렉토리를 지우고 처음부터 빌드한다",
+      "detail": "build 디렉토리를 지우고 처음부터 빌드",
       "windows": {
         "command": "if (Test-Path build) { Remove-Item -Recurse -Force build }; cmake -S . -B build -G 'MinGW Makefiles'; cmake --build build -j20"
       },
@@ -48,12 +56,23 @@
     {
       "label": "flash",
       "type": "shell",
-      "detail": "CP2102N UART 다운로드로 플래시에 굽는다 (영구)",
+      "detail": "UART 다운로드로 플래시에 굽는다 · 포트 선택",
       "dependsOn": "build-build",
       "windows": {
-        "command": "python ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin"
+        "command": "python ../firm-sdk/tools/flash.py --port ${input:port} --image build/km0_km4_image2.bin"
       },
-      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin",
+      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:port} --image build/km0_km4_image2.bin",
+      "problemMatcher": []
+    },
+    {
+      "label": "flash · 자동",
+      "type": "shell",
+      "detail": "포트를 자동으로 찾아 플래시에 굽는다 (CP2102N 우선)",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/flash.py --auto --image build/km0_km4_image2.bin"
+      },
+      "command": "python3 ../firm-sdk/tools/flash.py --auto --image build/km0_km4_image2.bin",
       "problemMatcher": []
     },
     {
@@ -62,29 +81,36 @@
       "detail": "부트로더까지 포함해 전체를 굽는다 (복구용)",
       "dependsOn": "build-build",
       "windows": {
-        "command": "python ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin --with-boot"
+        "command": "python ../firm-sdk/tools/flash.py --port ${input:port} --image build/km0_km4_image2.bin --with-boot"
       },
-      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:serialPort} --image build/km0_km4_image2.bin --with-boot",
+      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:port} --image build/km0_km4_image2.bin --with-boot",
+      "problemMatcher": []
+    },
+    {
+      "label": "flash-image",
+      "type": "shell",
+      "detail": "임의의 이미지 파일을 골라 굽는다 (백업본 복구 등)",
+      "windows": {
+        "command": "python ../firm-sdk/tools/flash.py --port ${input:port} --image ${input:image}"
+      },
+      "command": "python3 ../firm-sdk/tools/flash.py --port ${input:port} --image ${input:image}",
       "problemMatcher": []
     },
     {
       "label": "load-sram",
       "type": "shell",
-      "detail": "SWD 로 SRAM 에 직접 올려 실행한다 (플래시를 건드리지 않음, 반복 개발용)",
+      "detail": "SWD 로 SRAM 에 올려 실행 · 플래시를 건드리지 않는 반복 개발용",
       "dependsOn": "build-build",
       "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'targets rtl872xd.km4' -c halt -c 'load_image build/nu87-fw.elf' -c 'reg msp 0x10005000' -c 'nu87_run_image' -c resume -c shutdown",
       "problemMatcher": []
     },
 
-    // ── 콘솔 / 디버깅 ───────────────────────────────────────────────────
+    // ── 콘솔 ────────────────────────────────────────────────────────────
     {
       "label": "monitor",
       "type": "shell",
-      "detail": "LOGUART 콘솔 (115200). DTR/RTS 를 끄지 않으면 보드가 리셋된다",
-      "windows": {
-        "command": "python -m serial.tools.miniterm --rts 0 --dtr 0 ${input:serialPort} 115200"
-      },
-      "command": "python3 -m serial.tools.miniterm --rts 0 --dtr 0 ${input:serialPort} 115200",
+      "detail": "LOGUART 콘솔 · 포트와 보레이트를 고른다",
+      "command": "pyserial-miniterm --rts 0 --dtr 0 ${input:port} ${input:baud}",
       "problemMatcher": [],
       "isBackground": true,
       "presentation": {
@@ -92,6 +118,37 @@
         "focus": true
       }
     },
+    {
+      "label": "monitor · 자동",
+      "type": "shell",
+      "detail": "포트를 자동으로 찾아 115200 으로 연다",
+      "windows": {
+        "command": "python -m serial.tools.miniterm --rts 0 --dtr 0 (python ../firm-sdk/tools/list_ports.py --first) 115200"
+      },
+      "command": "python3 -m serial.tools.miniterm --rts 0 --dtr 0 $(python3 ../firm-sdk/tools/list_ports.py --first) 115200",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "port-list",
+      "type": "shell",
+      "detail": "연결된 시리얼 포트를 보여준다 (★ = 보드의 CP2102N)",
+      "windows": {
+        "command": "python ../firm-sdk/tools/list_ports.py"
+      },
+      "command": "python3 ../firm-sdk/tools/list_ports.py",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "clear": true
+      }
+    },
+
+    // ── 디버깅 ──────────────────────────────────────────────────────────
     {
       "label": "openocd",
       "type": "shell",
@@ -103,15 +160,10 @@
         "panel": "dedicated"
       }
     },
-
-    // ── 유틸 ────────────────────────────────────────────────────────────
     {
       "label": "flash-backup",
       "type": "shell",
       "detail": "SWD 로 플래시 4MB 전체를 백업한다 (약 2분)",
-      "windows": {
-        "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'nu87_backup ../backup/flash_backup.bin' -c shutdown"
-      },
       "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'nu87_backup ../backup/flash_backup.bin' -c shutdown",
       "problemMatcher": []
     },
@@ -122,6 +174,8 @@
       "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c nu87_imginfo -c shutdown",
       "problemMatcher": []
     },
+
+    // ── 유틸 ────────────────────────────────────────────────────────────
     {
       "label": "size",
       "type": "shell",
@@ -132,7 +186,7 @@
     {
       "label": "sdk-sync",
       "type": "shell",
-      "detail": "SDK 서브모듈에서 firm-sdk/lib/Realtek/ 로 재동기화한다",
+      "detail": "SDK 서브모듈에서 firm-sdk/lib/Realtek/ 로 재동기화",
       "windows": {
         "command": "python ../firm-sdk/tools/sync_sdk.py"
       },
@@ -143,10 +197,32 @@
 
   "inputs": [
     {
-      "id": "serialPort",
-      "type": "promptString",
-      "description": "시리얼 포트 (macOS: /dev/cu.usbserial-0001, Linux: /dev/ttyUSB0, Windows: COM3)",
-      "default": "/dev/cu.usbserial-0001"
+      "id": "port",
+      "type": "command",
+      "command": "firmware-task.pickSerialPort"
+    },
+    {
+      "id": "baud",
+      "type": "command",
+      "command": "firmware-task.promptInput",
+      "args": {
+        "prompt": "Baud rate",
+        "value": "115200",
+        "validateRegex": "^\\d+$"
+      }
+    },
+    {
+      "id": "image",
+      "type": "command",
+      "command": "firmware-task.pickFile",
+      "args": {
+        "filters": {
+          "Firmware": [
+            "bin",
+            "elf"
+          ]
+        }
+      }
     }
   ]
 }

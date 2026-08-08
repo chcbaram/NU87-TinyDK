@@ -35,6 +35,9 @@
     "cortex-debug.variableUseNaturalFormat": true
   },
   "extensions": {
+    // tasks.json 의 ${input:port} / ${input:baud} / ${input:image} 는
+    // firmware-task 확장이 제공하는 명령(firmware-task.pickSerialPort 등)을 쓴다.
+    // 확장이 없으면 "· 자동" 이 붙은 태스크를 쓰면 된다.
     "recommendations": [
       "ms-vscode.cpptools",
       "ms-vscode.cmake-tools",
