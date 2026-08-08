@@ -18,7 +18,7 @@ STM32H5 기반 `nu87-fw` 프로젝트를 **NU87 모듈(Realtek RTL8720DF / Ameba
 | 05 | [빌드 시스템](05-build-system.md) | CMake 독립 빌드, 툴체인 분리, **OS별 개발환경 구축** | ✅ |
 | 06 | [부팅 흐름과 이미지 포맷](06-boot-image.md) | 부트 체인, 32바이트 헤더, 링커스크립트 | ✅ |
 | 07 | [개발환경 구축](07-dev-environment.md) | **Windows / macOS / Linux 단계별 설치**, 툴체인 버전 정책 | ✅ |
-| 08 | [UART 다운로드](08-flash-download.md) | CP2102N 자동 다운로드, 플래싱 프로토콜 | 🚧 |
+| 08 | [UART 다운로드](08-flash-download.md) | CP2102N 자동 다운로드 회로, XMODEM-1K 프로토콜 실측 | 🚧 |
 | 09 | [BSP 계층](09-bsp.md) | 진입점, 링커스크립트, 시간 기반, **첫 부팅까지 막혔던 3가지** | ✅ |
 | 10 | [LED 드라이버](10-driver-led.md) | RGB LED, table-driven 패턴 | 🚧 |
 | 11 | [UART / LOG / CLI](11-driver-uart-log-cli.md) | LOGUART 드라이버, 부팅 로그, CLI 콘솔 | 🚧 |
