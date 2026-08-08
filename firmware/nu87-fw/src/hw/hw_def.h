@@ -6,7 +6,7 @@
 #include "assert_def.h"
 
 
-#define _DEF_FIRMWATRE_VERSION    "V260808R1"
+#define _DEF_FIRMWATRE_VERSION    "V260809R1"
 #define _DEF_BOARD_NAME           "NU87-TINYDK"
 
 
