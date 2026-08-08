@@ -55,16 +55,30 @@
 #define TASK_SCHEDULER_DISABLED     (1)
 #endif
 
-/* ── 무선 (미사용) ───────────────────────────────────────────────────── */
+/* ── 무선 ────────────────────────────────────────────────────────────── */
+#ifdef _USE_HW_WIFI
+#define CONFIG_WIFI_EN              1
+#define CONFIG_WIFI_NORMAL          1
+#define CONFIG_WIFI_MODULE          1
+#define CONFIG_NETWORK              1
+#else
 #undef  CONFIG_WIFI_EN
 #undef  CONFIG_WIFI_NORMAL
 #undef  CONFIG_WIFI_MODULE
 #undef  CONFIG_NETWORK
+#endif
+
 #undef  CONFIG_BT_EN
 #undef  CONFIG_BT
 
-/* ── 암호화 (미사용) ─────────────────────────────────────────────────── */
+/* ── 암호화 ──────────────────────────────────────────────────────────────
+ * lib_wlan.a 가 요구하는 mbedTLS 심볼 44 개 중 43 개가 칩 ROM 에 있다.
+ * 소스를 들이지 않고 ROM 것을 쓴다. */
+#ifdef _USE_HW_WIFI
+#define CONFIG_USE_MBEDTLS_ROM      1
+#else
 #undef  CONFIG_USE_MBEDTLS_ROM
+#endif
 #undef  CONFIG_MBED_TLS_ENABLED
 
 /* ── 주변장치 서브시스템 ─────────────────────────────────────────────── */

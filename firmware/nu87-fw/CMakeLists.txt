@@ -67,6 +67,15 @@ file(GLOB SRC_FILES_VENDOR CONFIGURE_DEPENDS
 option(NU87_RTOS "FreeRTOS 사용" ON)
 message(STATUS "FreeRTOS: ${NU87_RTOS}")
 
+# ── WiFi ────────────────────────────────────────────────────────────────────
+# lib_wlan.a / lib_wps.a 를 링크하고 lwIP 와 osdep 을 함께 빌드한다.
+# FreeRTOS 없이는 성립하지 않는다.
+option(NU87_WIFI "WiFi 사용" OFF)
+if(NU87_WIFI AND NOT NU87_RTOS)
+  message(FATAL_ERROR "NU87_WIFI 는 NU87_RTOS 를 요구합니다")
+endif()
+message(STATUS "WiFi: ${NU87_WIFI}")
+
 set(FREERTOS_DIR ${REALTEK_DIR}/freertos)
 
 if(NU87_RTOS)
@@ -90,6 +99,61 @@ else()
   set(SRC_FILES_FREERTOS)
   # bsp/rtos/ 는 커널 없이는 의미가 없다
   list(FILTER SRC_FILES EXCLUDE REGEX "src/bsp/rtos/")
+endif()
+
+
+# ── WiFi 소스 ───────────────────────────────────────────────────────────────
+# 파일 목록은 SDK 의 project_hp/asdk/make/{os/freertos,api/wifi,network} Makefile
+# 을 그대로 따랐다. lwIP 는 소스 트리에 107 개가 있지만 SDK 가 쓰는 것은 49 개다.
+set(SRC_FILES_WIFI)
+
+if(NU87_WIFI)
+  set(LWIP_DIR    ${REALTEK_DIR}/network/lwip)
+  set(WIFIAPI_DIR ${REALTEK_DIR}/api)
+
+  file(GLOB SRC_CRYPTO CONFIGURE_DEPENDS ${REALTEK_DIR}/fwlib/crypto/*.c)
+
+  file(GLOB_RECURSE SRC_LWIP CONFIGURE_DEPENDS
+    ${LWIP_DIR}/src/core/*.c
+    ${LWIP_DIR}/src/api/*.c
+    ${LWIP_DIR}/src/netif/ethernet.c
+    ${LWIP_DIR}/port/realtek/freertos/*.c
+  )
+
+  set(SRC_FILES_WIFI
+    ${SRC_LWIP}
+    ${REALTEK_DIR}/network/dhcp/dhcps.c
+
+    ${WIFIAPI_DIR}/lwip_netconf.c
+    ${WIFIAPI_DIR}/wifi/wifi_util.c
+    ${WIFIAPI_DIR}/wifi/wifi_conf.c
+    ${WIFIAPI_DIR}/wifi/wifi_promisc.c
+    ${WIFIAPI_DIR}/wifi/wifi_ind.c
+
+    ${REALTEK_DIR}/wlan/osdep/lwip_intf.c
+    # rtw_opt_skbuf / rtw_opt_wlan_ram_map 은 이미 lib_wlan.a 안에 있다.
+    # 함께 컴파일하면 중복 정의가 되고, 응용이 제공해야 하는
+    # sram0_reserve_malloc/free 까지 요구하게 된다.
+    ${REALTEK_DIR}/wlan/option/rtw_opt_crypto_ssl.c
+    ${REALTEK_DIR}/wlan/option/rtw_opt_rf_para_rtl8721d.c
+
+    # mbedTLS 는 구현이 ROM 에 있지만 이 함수만 밖에 있다.
+    ${REALTEK_DIR}/network/ssl/mbedtls/library/platform.c
+    # ROM mbedTLS 의 할당자를 등록한다 (platform_set_malloc_free)
+    ${REALTEK_DIR}/network/ssl/ssl_ram_map/ssl_ram_map.c
+
+    # 하드웨어 암호 엔진 (rtl_crypto_*)
+    ${SRC_CRYPTO}
+    ${REALTEK_DIR}/api/wifi/rtw_wpa_supplicant/wpa_supplicant/wifi_eap_config.c
+
+    # PAD_CMD 하나 때문에 가져온 KM0 쪽 파일. 나머지 ram_lp 는 넣지 않는다.
+    ${REALTEK_DIR}/fwlib/ram_lp_pinmap/rtl8721dlp_pinmap.c
+
+    ${REALTEK_DIR}/os_dep/osdep_service.c
+    ${REALTEK_DIR}/os_dep/device_lock.c
+    ${REALTEK_DIR}/freertos/freertos_service.c
+    ${REALTEK_DIR}/freertos/freertos_heap5_config.c
+  )
 endif()
 
 
@@ -145,6 +209,7 @@ add_executable(${EXECUTABLE}
   ${SRC_FILES_RECURSE}
   ${SRC_FILES_VENDOR}
   ${SRC_FILES_FREERTOS}
+  ${SRC_FILES_WIFI}
 )
 
 
@@ -185,11 +250,57 @@ if(NU87_RTOS)
   )
 endif()
 
+if(NU87_WIFI)
+  target_include_directories(${EXECUTABLE} PRIVATE
+    ${REALTEK_DIR}/os_dep/include
+    ${REALTEK_DIR}/wlan/include
+    ${REALTEK_DIR}/wlan/osdep
+    ${REALTEK_DIR}/api
+    ${REALTEK_DIR}/api/wifi
+    ${REALTEK_DIR}/api/network/include
+    ${REALTEK_DIR}/api/platform
+    ${REALTEK_DIR}/network/lwip/src/include
+    ${REALTEK_DIR}/network/lwip/src/include/netif
+    ${REALTEK_DIR}/network/lwip/port/realtek
+    ${REALTEK_DIR}/network/lwip/port/realtek/freertos
+    ${REALTEK_DIR}/network            # wifi_conf.c 가 "dhcp/dhcps.h" 로 include
+    ${REALTEK_DIR}/network/dhcp
+    # mbedTLS 는 구현이 ROM 에 있고 헤더만 필요하다
+    ${REALTEK_DIR}/network/ssl/mbedtls/include
+    ${REALTEK_DIR}/network/ssl/ssl_ram_map/rom
+    ${REALTEK_DIR}/wlan/wlan_ram_map/rom
+    ${REALTEK_DIR}/api/wifi/rtw_wpa_supplicant/src
+  )
+
+  # 벤더 코드다. 우리 소스와 같은 -Wall 기준을 강요하지 않는다.
+  set_source_files_properties(
+    ${SRC_FILES_WIFI}
+    PROPERTIES COMPILE_OPTIONS "${NU87_VENDOR_RELAX_FLAGS}"
+  )
+
+  # src/include/lwip 은 -idirafter 여야 한다. 일반 -I 로 넣으면 lwip/xxx.h 가
+  # xxx.h 로도 잡혀 표준 헤더나 다른 헤더를 가린다 (SDK Makefile.include.gen 과 동일).
+  target_compile_options(${EXECUTABLE} PRIVATE
+    -idirafter ${REALTEK_DIR}/network/lwip/src/include/lwip
+  )
+
+  # 소스가 공개되지 않은 무선 아카이브. 서로를 참조하므로 그룹으로 묶는다.
+  target_link_libraries(${EXECUTABLE} PRIVATE
+    -Wl,--start-group
+    ${REALTEK_DIR}/lib/application/lib_wlan.a
+    ${REALTEK_DIR}/lib/application/lib_wps.a
+    ${REALTEK_DIR}/lib/application/lib_pmc_hp.a
+    ${REALTEK_DIR}/lib/application/lib_eap.a
+    -Wl,--end-group
+  )
+endif()
+
 
 target_compile_definitions(${EXECUTABLE} PRIVATE
   -DCONFIG_PLATFORM_8721D
   # 명령줄로 정의해야 bsp.h 가 hw_def.h 보다 먼저 처리될 때도 값이 잡힌다.
   $<$<BOOL:${NU87_RTOS}>:_USE_HW_RTOS>
+  $<$<BOOL:${NU87_WIFI}>:_USE_HW_WIFI>
 )
 
 

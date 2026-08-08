@@ -129,6 +129,18 @@ static void nu87MpuNoCacheInit(void)
 /* ──────────────────────────────────────────────────────────────────────────
  *  이미지 진입점
  * ────────────────────────────────────────────────────────────────────────── */
+#ifdef _USE_HW_WIFI
+/* 벤더 드라이버가 임계구역 진입/이탈을 이 맵으로 부른다.
+ * 무선 라이브러리와 크립토 엔진이 참조하므로 반드시 채워야 한다. */
+struct _driver_call_os_func_map driver_call_os_func_map;
+
+static void nu87DriverOsFuncInit(void)
+{
+  driver_call_os_func_map.driver_enter_critical = vPortEnterCritical;
+  driver_call_os_func_map.driver_exit_critical  = vPortExitCritical;
+}
+#endif
+
 static void nu87AppStart(void)
 {
   /* 비보안 벡터테이블 초기화. 이후 InterruptRegister() / __NVIC_SetVector() 가 동작한다 */
@@ -145,6 +157,10 @@ static void nu87AppStart(void)
 
   /* C++ 전역 생성자 / __init_array 순회 */
   __libc_init_array();
+
+#ifdef _USE_HW_WIFI
+  nu87DriverOsFuncInit();
+#endif
 
   /* 진입 시 SP 가 4바이트 정렬일 수 있다. AAPCS 는 8바이트를 요구하고
    * 가변인자 함수(DiagPrintf 등)가 이를 전제한다. */

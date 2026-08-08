@@ -43,6 +43,9 @@ component/soc/realtek/amebad/fwlib/ram_hp/             -> fwlib/ram_hp/
 component/soc/realtek/amebad/fwlib/ram_common/         -> fwlib/ram_common/
 component/soc/realtek/amebad/fwlib/usrcfg/             -> fwlib/usrcfg/
 
+# 하드웨어 암호 엔진. WiFi 단계부터 lib_wlan.a 가 rtl_crypto_* 를 부른다.
+component/soc/realtek/amebad/fwlib/crypto/             -> fwlib/crypto/
+
 # ══════════════════════════════════════════════════════════════════════════
 #  링커스크립트
 # ══════════════════════════════════════════════════════════════════════════
@@ -151,6 +154,10 @@ project/realtek_amebaD_va0_example/inc/inc_hp/FreeRTOSConfig.h        -> freerto
 # 벤더 무선 아카이브. 소스가 공개되지 않은 부분이다.
 project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_wlan.a  -> lib/application/lib_wlan.a
 project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_wps.a   -> lib/application/lib_wps.a
+# 절전 콜백(pmu_register_sleep_callback 등). 헤더만 공개되어 있고 구현은 여기 있다.
+project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_pmc_hp.a -> lib/application/lib_pmc_hp.a
+# WPA/EAP
+project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_eap.a    -> lib/application/lib_eap.a
 
 # OS 추상화. lib_wlan.a 가 요구하는 심볼의 절반이 여기서 나온다
 # (ATOMIC_*, rtw_*, device_mutex_*, save_flags/restore_flags 등).
@@ -160,6 +167,7 @@ component/os/freertos/freertos_service.h              -> freertos/freertos_servi
 # PLATFORM_FREERTOS 가 켜지면 ameba_soc.h 가 이 헤더들을 include 한다.
 component/os/freertos/freertos_pmu.h                  -> freertos/freertos_pmu.h
 component/os/freertos/freertos_heap5_config.h         -> freertos/freertos_heap5_config.h
+component/os/freertos/freertos_heap5_config.c         -> freertos/freertos_heap5_config.c
 
 # WLAN 드라이버와 lwIP 사이의 접착부. LwIP_GetIP / rltk_wlan_* / xnetif.
 component/common/drivers/wlan/realtek/src/osdep/      -> wlan/osdep/
@@ -167,15 +175,33 @@ component/common/drivers/wlan/realtek/include/        -> wlan/include/
 
 # WiFi API. wifi_conf / wifi_ind / wifi_util / wpa_supplicant 접착부.
 component/common/api/wifi/                            -> api/wifi/
+# wpa_supplicant 접착부. lib_wlan.a 가 get_eap_method / eap_autoreconnect_hdl 를 부른다.
+component/common/api/wifi/rtw_wpa_supplicant/          -> api/wifi/rtw_wpa_supplicant/
+# mbedtls_platform_set_calloc_free 를 여기서 등록한다.
+component/common/drivers/wlan/realtek/src/core/option/ -> wlan/option/
+component/common/drivers/wlan/realtek/wlan_ram_map/      -> wlan/wlan_ram_map/
+
+# mbedTLS 는 구현이 칩 ROM 에 있어 헤더만 필요하다 (CONFIG_USE_MBEDTLS_ROM=y).
+component/common/network/ssl/mbedtls-2.4.0/include/   -> network/ssl/mbedtls/include/
+# mbedtls_platform_set_calloc_free 만 ROM 밖에 있어 이 파일 하나가 필요하다.
+component/common/network/ssl/mbedtls-2.4.0/library/platform.c -> network/ssl/mbedtls/library/platform.c
+# mbedtls/config.h 가 ROM 매핑 헤더를 include 한다.
+component/common/network/ssl/ssl_ram_map/                -> network/ssl/ssl_ram_map/
+
+# PAD_CMD 는 PADCTR 레지스터만 만지는 범용 함수인데 KM0 파일에 들어 있다.
+# lib_wlan.a 가 KM4 에서 부르므로 이 파일만 예외로 가져온다.
+# (ram_lp/ 전체는 KM4 이미지에 들어가면 안 되므로 복사하지 않는다)
+component/soc/realtek/amebad/fwlib/ram_lp/rtl8721dlp_pinmap.c -> fwlib/ram_lp_pinmap/rtl8721dlp_pinmap.c
 component/common/api/lwip_netconf.c                   -> api/lwip_netconf.c
+component/common/api/lwip_netconf.h                   -> api/lwip_netconf.h
+# lwipopts.h / lwippools.h / netconf.h — lwIP 설정은 프로젝트가 제공한다.
+component/common/api/network/include/                 -> api/network/include/
+component/common/api/platform/                        -> api/platform/
 
 # lwIP v2.0.2 (.config 의 CONFIG_LWIP_VERSION 기준)
 component/common/network/lwip/lwip_v2.0.2/src/        -> network/lwip/src/
 component/common/network/lwip/lwip_v2.0.2/port/realtek/ -> network/lwip/port/realtek/
 component/common/network/dhcp/                        -> network/dhcp/
-
-# 절전. lib_wlan.a 가 pmu_register_sleep_callback 등을 부른다.
-component/soc/realtek/amebad/misc/rtl8721d_freertos_pmu.c -> misc/rtl8721d_freertos_pmu.c
 
 # ══════════════════════════════════════════════════════════════════════════
 #  참고: CMakeLists.txt EXCLUDE_PATHS 에 넣어야 하는 파일들

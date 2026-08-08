@@ -52,6 +52,8 @@
 #define _USE_HW_IPC
 #define      HW_IPC_CH_MAX          32
 
+/* _USE_HW_WIFI 는 CMake 의 NU87_WIFI 옵션이 명령줄로 정의한다 */
+
 
 //-- CLI
 //

@@ -28,6 +28,25 @@
 #define CONFIG_INIT_NET             0
 #define CONFIG_BSD_TCP              0
 
+/* ── 무선 / 네트워크 ─────────────────────────────────────────────────── */
+#ifdef _USE_HW_WIFI
+#define CONFIG_WLAN                 1
+#define CONFIG_LWIP_LAYER           1
+#define CONFIG_INIT_NET             1   /* 부팅 시 lwIP 를 올린다 */
+#define CONFIG_ETHERNET             0   /* 유선 없음 */
+#define NET_IF_NUM                  1   /* wlan0 하나 */
+#else
+#define CONFIG_WLAN                 0
+#define CONFIG_LWIP_LAYER           0
+#define CONFIG_INIT_NET             0
+#define CONFIG_ETHERNET             0
+#define NET_IF_NUM                  0
+#endif
+
+/* SDK 셸의 대화형 WiFi 명령. 우리 CLI 를 쓰므로 끈다. */
+#define CONFIG_INTERACTIVE_MODE     0
+#define CONFIG_INTERACTIVE_EXT      0
+
 /* ── OTA ─────────────────────────────────────────────────────────────── */
 /* HTTP_OTA_UPDATE / HTTPS_OTA_UPDATE 를 정의하면 rtl8721d_ota.h 가
  * mbedtls/version.h, mbedtls/ssl.h 를 요구한다. 켤 때는 sdk_manifest.txt 에

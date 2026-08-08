@@ -13,6 +13,7 @@ extern "C" {
 #include "gpio.h"
 #include "ipc.h"
 #include "reset.h"
+#include "wifi.h"
 #include "uart.h"
 #include "cli.h"
 #include "log.h"

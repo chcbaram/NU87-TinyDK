@@ -55,6 +55,9 @@ bool hwInit(void)
   resetInit();
   gpioInit();
   ipcInit();
+#ifdef _USE_HW_WIFI
+  wifiInit();
+#endif
 
   logBoot(false);
 
