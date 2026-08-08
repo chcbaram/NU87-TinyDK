@@ -1,0 +1,44 @@
+{
+  "folders": [
+    {
+      "name": "firm-sdk",
+      "path": "../../firm-sdk"
+    },    
+    {
+      "name": "nu87-fw",
+      "path": "../"
+    },
+  ],
+  "settings": {
+    "C_Cpp.autoAddFileAssociations": false,
+    "C_Cpp.default.compileCommands": "${workspaceFolder:nu87-fw}/build/compile_commands.json",
+    "files.exclude": {
+      "**/.DS_Store": true,
+      "**/.hg": true,
+      "**/.svn": true,
+      "**/CVS": true,
+      "**/prj": true,
+      "**/Thumbs.db": true
+    },
+    "files.associations": {
+      "*.ld": "linkerscript"
+    },
+    "search.exclude": {
+      "**/build": true,
+      "ameba-rtos-d": true,
+      "lib/Realtek": true
+    },
+    "files.watcherExclude": {
+      "**/build/**": true,
+      "**/ameba-rtos-d/**": true
+    },
+    "cortex-debug.variableUseNaturalFormat": true
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-vscode.cpptools",
+      "ms-vscode.cmake-tools",
+      "marus25.cortex-debug"
+    ]
+  }
+}
