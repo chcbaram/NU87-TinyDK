@@ -54,7 +54,7 @@
 
     // ── 플래싱 ──────────────────────────────────────────────────────────
     {
-      "label": "flash",
+      "label": "flash-flash",
       "type": "shell",
       "detail": "UART 다운로드로 플래시에 굽는다 · 포트 선택",
       "dependsOn": "build-build",
@@ -65,7 +65,7 @@
       "problemMatcher": []
     },
     {
-      "label": "flash · 자동",
+      "label": "flash-flash · 자동",
       "type": "shell",
       "detail": "포트를 자동으로 찾아 플래시에 굽는다 (CP2102N 우선)",
       "dependsOn": "build-build",
@@ -97,7 +97,7 @@
       "problemMatcher": []
     },
     {
-      "label": "load-sram",
+      "label": "flash-load-sram",
       "type": "shell",
       "detail": "SWD 로 SRAM 에 올려 실행 · 플래시를 건드리지 않는 반복 개발용",
       "dependsOn": "build-build",
@@ -107,7 +107,7 @@
 
     // ── 콘솔 ────────────────────────────────────────────────────────────
     {
-      "label": "monitor",
+      "label": "console - monitor",
       "type": "shell",
       "detail": "LOGUART 콘솔 · 포트와 보레이트를 고른다",
       "command": "pyserial-miniterm --rts 0 --dtr 0 ${input:port} ${input:baud}",
@@ -119,7 +119,7 @@
       }
     },
     {
-      "label": "monitor · 자동",
+      "label": "console - monitor · 자동",
       "type": "shell",
       "detail": "포트를 자동으로 찾아 115200 으로 연다",
       "windows": {
@@ -134,7 +134,7 @@
       }
     },
     {
-      "label": "port-list",
+      "label": "console - port-list",
       "type": "shell",
       "detail": "연결된 시리얼 포트를 보여준다 (★ = 보드의 CP2102N)",
       "windows": {
@@ -150,7 +150,7 @@
 
     // ── 디버깅 ──────────────────────────────────────────────────────────
     {
-      "label": "openocd",
+      "label": "debug - openocd",
       "type": "shell",
       "detail": "OpenOCD GDB 서버 (KM0 :3333 / KM4 :3334)",
       "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg",
@@ -161,7 +161,7 @@
       }
     },
     {
-      "label": "flash-backup",
+      "label": "debug - flash-backup",
       "type": "shell",
       "detail": "SWD 로 플래시 4MB 전체를 백업한다 (약 2분)",
       "command": "openocd -f ../firm-sdk/tools/openocd/nu87.cfg -c init -c 'nu87_backup ../backup/flash_backup.bin' -c shutdown",
@@ -177,14 +177,14 @@
 
     // ── 유틸 ────────────────────────────────────────────────────────────
     {
-      "label": "size",
+      "label": "util - size",
       "type": "shell",
       "detail": "섹션별 크기와 SRAM 사용량",
       "command": "arm-none-eabi-size -A build/nu87-fw.elf",
       "problemMatcher": []
     },
     {
-      "label": "sdk-sync",
+      "label": "util - sdk-sync",
       "type": "shell",
       "detail": "SDK 서브모듈에서 firm-sdk/lib/Realtek/ 로 재동기화",
       "windows": {
