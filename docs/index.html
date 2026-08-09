@@ -406,21 +406,25 @@ async function openUsb() {
   await port.open({ baudRate: 115200 });
 
   const writer = port.writable.getWriter();
-  let datCb = null;
+  let reader  = null;
+  let datCb   = null;
+  let closing = false;
 
   /* USB 는 채널이 하나다. CLI 와 대량 전송이 같은 선을 쓴다.
    * ota write 에 채널을 주지 않으면 보드가 지금 CLI 채널로 받는다. */
   (async () => {
-    const reader = port.readable.getReader();
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (datCb) datCb(value);
-        else       onCliData(value);
-      }
-    } catch (e) { /* 포트가 닫히면 여기로 온다 */ }
-    reader.releaseLock();
+    while (!closing) {
+      reader = port.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (datCb) datCb(value);
+          else       onCliData(value);
+        }
+      } catch (e) { /* cancel() 로 깨어난다 */ }
+      finally { reader.releaseLock(); }
+    }
   })();
 
   return {
@@ -429,7 +433,16 @@ async function openUsb() {
     writeCli: (b) => writer.write(b),
     writeDat: (b) => writer.write(b),
     onDat: (cb) => { datCb = cb; },
-    close: async () => { writer.releaseLock(); await port.close(); },
+    /* ★ 읽는 쪽을 먼저 풀어야 포트가 닫힌다.
+     * port.close() 는 reader / writer 가 잠금을 쥐고 있으면 거절한다.
+     * 앞서 writer 만 풀고 reader 는 읽기에 매달린 채로 두어서, 해제를 눌러도
+     * 실제로는 닫히지 않고 다른 도구가 포트를 열지 못했다. */
+    close: async () => {
+      closing = true;
+      try { if (reader) await reader.cancel(); } catch (e) { /* 이미 풀림 */ }
+      try { writer.releaseLock(); }             catch (e) { /* 이미 풀림 */ }
+      try { await port.close(); }               catch (e) { /* 이미 닫힘 */ }
+    },
   };
 }
 
@@ -451,11 +464,13 @@ async function connect(open, label) {
   }
 }
 
-function disconnect() {
-  if (transport) transport.close();
+async function disconnect() {
+  const t = transport;
   transport = null;
   setConnected(false);
   say('');
+
+  if (t) { try { await t.close(); } catch (e) { say(e.message, 'err'); } }
 }
 
 
