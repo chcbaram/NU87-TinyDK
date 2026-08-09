@@ -140,17 +140,23 @@
          margin: 10px 0; }
   .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
+  /* 내용과 콘솔 사이의 분리막. 끌어서 높이를 나눈다. */
+  .splitter {
+    flex: none; height: 7px; cursor: row-resize; background: var(--bg);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .splitter:hover, .splitter.drag { background: var(--line); }
+
   /* 콘솔 — 바닥 고정. 창이 낮으면 접어서 입력줄만 남긴다. */
-  footer { flex: none; border-top: 1px solid var(--line); background: var(--panel);
-           padding: 8px 14px 10px; }
+  footer { flex: none; display: flex; flex-direction: column;
+           background: var(--panel); padding: 8px 14px 10px; height: 200px; }
   .termbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .termbar h2 { margin: 0; flex: 1; }
   .termbar button { padding: 4px 10px; font-size: 13px; }
   #term {
     font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
     background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
-    padding: 10px; height: 120px; min-height: 60px; overflow-y: auto; margin-bottom: 8px;
-    resize: vertical;   /* 오른쪽 아래 모서리를 끌어 높이를 바꾼다 */
+    padding: 10px; flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 8px;
   }
   footer.fold #term { display: none; }
   .cmdline { display: flex; gap: 8px; }
@@ -225,7 +231,9 @@
   </section>
 </main>
 
-<footer>
+<div class="splitter" id="splitter" title="끌어서 높이 조절"></div>
+
+<footer id="console">
   <div class="termbar">
     <h2>콘솔</h2>
     <button id="btnFold">접기</button>
@@ -675,10 +683,48 @@ $('btnRefresh').addEventListener('click', refresh);
 $('btnScan').addEventListener('click', scan);
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
 
+/* 콘솔 높이 — 분리막을 끌어 나눈다. 다음에 열 때도 그 높이를 쓴다. */
+const CONSOLE_MIN = 92;      /* 제목줄 + 입력줄만 남는 높이 */
+
+function setConsoleHeight(px) {
+  const app = document.querySelector('.app').getBoundingClientRect();
+  const max = Math.max(CONSOLE_MIN, app.height - 200);
+  const h = Math.min(max, Math.max(CONSOLE_MIN, Math.round(px)));
+
+  $('console').style.height = h + 'px';
+  $('console').classList.toggle('fold', h <= CONSOLE_MIN);
+  $('btnFold').textContent = h <= CONSOLE_MIN ? '펴기' : '접기';
+  localStorage.setItem('consoleHeight', h);
+}
+
+setConsoleHeight(+localStorage.getItem('consoleHeight') || 200);
+
 $('btnFold').addEventListener('click', () => {
-  const fold = document.querySelector('footer').classList.toggle('fold');
-  $('btnFold').textContent = fold ? '펴기' : '접기';
+  const folded = $('console').classList.contains('fold');
+  setConsoleHeight(folded ? 200 : CONSOLE_MIN);
 });
+
+{
+  const sp = $('splitter');
+  let dragging = false;
+
+  sp.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    sp.classList.add('drag');
+    sp.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  sp.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const app = document.querySelector('.app').getBoundingClientRect();
+    setConsoleHeight(app.bottom - e.clientY);
+  });
+
+  const stop = () => { dragging = false; sp.classList.remove('drag'); };
+  sp.addEventListener('pointerup', stop);
+  sp.addEventListener('pointercancel', stop);
+}
 
 $('btnFlash').addEventListener('click', () => {
   const file = $('fwFile').files[0];
