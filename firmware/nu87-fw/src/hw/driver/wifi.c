@@ -100,7 +100,12 @@ bool wifiIsConnected(void)
   return (wifi_is_connected_to_ap() == RTW_SUCCESS);
 }
 
-/* 연결만 한다. IP 는 아직 없다. DHCP 를 언제 돌릴지는 상위 모듈이 정한다. */
+/* 연결만 한다. IP 는 아직 없다. DHCP 를 언제 돌릴지는 상위 모듈이 정한다.
+ *
+ * 보안 방식을 WPA2/AES 로 고정해도 된다. wifi_conf.c 의 switch 를 보면
+ * WPA/WPA2/WPA3 의 AES 계열이 전부 같은 갈래(CCMP + passphrase)로 들어간다.
+ * 값이 달라도 하는 일이 같으니 스캔 결과를 참조할 필요가 없다.
+ * 갈래가 다른 것은 TKIP 전용과 WEP 뿐이고 요즘 공유기에는 없다. */
 bool wifiConnect(const char *ssid, const char *pass)
 {
   rtw_security_t sec = (pass != NULL && pass[0] != 0) ? RTW_SECURITY_WPA2_AES_PSK
@@ -200,9 +205,20 @@ static const char *wifiSecurityName(rtw_security_t sec)
     case RTW_SECURITY_WPA2_TKIP_PSK:    return "WPA2/TKIP";
     case RTW_SECURITY_WPA2_AES_PSK:     return "WPA2/AES";
     case RTW_SECURITY_WPA2_MIXED_PSK:   return "WPA2/MIXED";
+    /* 국내 공유기는 WPA/WPA2 혼용이 흔하다. 빠뜨리면 전부 "?" 로 보인다. */
+    case RTW_SECURITY_WPA_WPA2_TKIP_PSK:  return "WPA/WPA2/TKIP";
+    case RTW_SECURITY_WPA_WPA2_AES_PSK:   return "WPA/WPA2/AES";
+    case RTW_SECURITY_WPA_WPA2_MIXED_PSK: return "WPA/WPA2";
     case RTW_SECURITY_WPA2_WPA3_MIXED:  return "WPA2/WPA3";
     case RTW_SECURITY_WPA3_AES_PSK:     return "WPA3/AES";
-    default:                            return "?";
+
+    /* 모르는 값은 숨기지 말고 그대로 보여준다. 진단에 필요하다. */
+    default:
+    {
+      static char buf[16];
+      snprintf(buf, sizeof(buf), "0x%X", (unsigned int)sec);
+      return buf;
+    }
   }
 }
 
