@@ -36,7 +36,6 @@
  *
  * Web Bluetooth 는 16비트 UUID 로도 그대로 필터하고 접근할 수 있으므로
  * 실사용에는 지장이 없다. */
-#define BLE_SVC_UUID16            0xFF87    /* 서비스 */
 #define BLE_SVC_UUID16_CLI_RX     0xFF88    /* CLI  호스트 -> 보드 */
 #define BLE_SVC_UUID16_CLI_TX     0xFF89    /* CLI  보드 -> 호스트 */
 #define BLE_SVC_UUID16_DAT_RX     0xFF8A    /* DATA 호스트 -> 보드 */

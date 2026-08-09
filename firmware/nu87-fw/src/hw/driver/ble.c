@@ -102,7 +102,7 @@ static void    bleThread(void *arg);
 static void    bleStackStart(void);
 static void bleGapParamInit(void);
 static void bleProfileInit(void);
-static void bleAdvDataSetName(void);
+static void bleAdvDataBuild(void);
 static void bleHandleGapMsg(T_IO_MSG *p_msg);
 static T_APP_RESULT bleProfileCallback(T_SERVER_ID service_id, void *p_data);
 static void bleHandleDevState(T_GAP_DEV_STATE state_new);
@@ -117,7 +117,7 @@ static void cliBle(cli_args_t *args);
 
 bool bleInit(void)
 {
-  bleAdvDataSetName();
+  bleAdvDataBuild();
   blePipeInit();
 
   is_init = true;
@@ -409,21 +409,31 @@ static void bleProfileInit(void)
   server_register_app_cb(bleProfileCallback);
 }
 
-/* 광고 패킷의 이름 필드를 보드 이름으로 채운다. AD 구조는 [길이][타입][값] 이고
- * 길이는 타입까지 포함하므로 이름 길이 + 1 이다. */
-static void bleAdvDataSetName(void)
+/* 광고 패킷을 만든다. AD 구조는 [길이][타입][값] 이고 길이는 타입까지 포함한다.
+ *
+ * 서비스 UUID 를 반드시 실어야 한다. 브라우저의 Web Bluetooth 는
+ * requestDevice({filters:[{services:[...]}]}) 를 광고에 실린 UUID 로 거르므로,
+ * 빠뜨리면 장치 선택창에 아예 뜨지 않는다. */
+static void bleAdvDataBuild(void)
 {
   const char *p_name = _DEF_BOARD_NAME;
   uint32_t name_len = strlen(p_name);
   uint32_t index = 3;                     /* flags AD 3 바이트 뒤 */
 
-  if (index + 2 + name_len > sizeof(adv_data)) return;
+  adv_data[index++] = 1 + 2;
+  adv_data[index++] = GAP_ADTYPE_16BIT_COMPLETE;
+  adv_data[index++] = LO_WORD(BLE_SVC_UUID16);
+  adv_data[index++] = HI_WORD(BLE_SVC_UUID16);
 
-  adv_data[index++] = name_len + 1;
-  adv_data[index++] = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
-  memcpy(&adv_data[index], p_name, name_len);
+  if (index + 2 + name_len <= sizeof(adv_data))
+  {
+    adv_data[index++] = name_len + 1;
+    adv_data[index++] = GAP_ADTYPE_LOCAL_NAME_COMPLETE;
+    memcpy(&adv_data[index], p_name, name_len);
+    index += name_len;
+  }
 
-  adv_data_len = index + name_len;
+  adv_data_len = index;
 }
 
 /* GAP 상태 변화는 콜백이 아니라 IO 메시지 큐로 온다. 페이로드가 union 이라

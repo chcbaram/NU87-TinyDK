@@ -12,6 +12,9 @@ extern "C" {
 #include <profile_server.h>
 
 
+/* 광고에 실어야 하므로 밖에서도 보여야 한다. */
+#define BLE_SVC_UUID16            0xFF87
+
 enum
 {
   BLE_SVC_CH_CLI,

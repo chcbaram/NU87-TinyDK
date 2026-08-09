@@ -1,0 +1,333 @@
+<!doctype html>
+<!--
+  NU87-TinyDK 설정 페이지 — GitHub Pages 에서 서빙한다.
+
+  Web Bluetooth 로 보드에 붙어 CLI 를 그대로 몰고, 그 출력을 파싱해 보여준다.
+  펌웨어에 전용 프로토콜을 두지 않은 이유는 CLI 가 이미 모든 것을 할 수 있기
+  때문이다 (firmware/nu87-fw/src/ap/modules/common/cli/driver/cli_ble.c).
+
+  펌웨어 문서는 firmware/docs/ 에 있다. 이 폴더는 Pages 용이다.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NU87-TinyDK</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --line: #e2e5ea;
+    --text: #1b1f24;
+    --dim: #666e79;
+    --accent: #2f6feb;
+    --ok: #1a7f37;
+    --err: #cf222e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --line: #30363d;
+      --text: #e6edf3; --dim: #8b949e; --accent: #4d8ef7;
+      --ok: #3fb950; --err: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--dim); font-size: 13px; margin: 0 0 24px; }
+
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
+  .dot.on { background: var(--ok); }
+
+  button {
+    font: inherit; padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--dim); margin: 0 0 12px; font-weight: 600; }
+
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
+  dt { color: var(--dim); font-size: 13px; }
+  dd { margin: 0; font-family: var(--mono); font-size: 13px; word-break: break-all; }
+
+  form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+  label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  input {
+    font: inherit; width: 100%; padding: 8px 10px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  @media (max-width: 560px) { form { grid-template-columns: 1fr; } }
+
+  .term {
+    font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+    padding: 12px; height: 260px; overflow-y: auto; margin-bottom: 10px;
+  }
+  .cmdline { display: flex; gap: 8px; }
+  .cmdline input { font-family: var(--mono); }
+
+  .note { color: var(--dim); font-size: 13px; }
+  .note code { font-family: var(--mono); font-size: 12px; }
+  #msg { min-height: 20px; font-size: 13px; }
+  #msg.err { color: var(--err); }
+  #msg.ok  { color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="dot" id="dot"></span>
+    <h1>NU87-TinyDK</h1>
+    <button class="primary" id="btnConnect">연결</button>
+    <button id="btnDisconnect" disabled>해제</button>
+  </header>
+  <p class="sub">Web Bluetooth 로 보드에 붙어 설정한다. Chrome / Edge 에서 동작한다.</p>
+
+  <div id="msg"></div>
+
+  <div class="card">
+    <h2>보드</h2>
+    <dl id="info">
+      <dt>상태</dt><dd id="v-state">—</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>WiFi</h2>
+    <form id="wifiForm">
+      <div>
+        <label for="ssid">SSID</label>
+        <input id="ssid" autocomplete="off" spellcheck="false" placeholder="공유기 이름">
+      </div>
+      <div>
+        <label for="pass">비밀번호</label>
+        <input id="pass" type="password" autocomplete="off" placeholder="없으면 비워 둔다">
+      </div>
+      <button class="primary" id="btnWifi" disabled>접속</button>
+    </form>
+    <p class="note" style="margin-bottom:0">
+      저장 후 다음 부팅부터 자동으로 붙는다. <code>nvs</code> 에 남는다.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>콘솔</h2>
+    <div class="term" id="term"></div>
+    <div class="cmdline">
+      <input id="cmd" placeholder="help" autocomplete="off" spellcheck="false" disabled>
+      <button id="btnSend" disabled>보내기</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* 펌웨어 hw/driver/ble_svc.c 의 정의와 같아야 한다. */
+const SVC    = 0xFF87;
+const CLI_RX = 0xFF88;   /* 호스트 -> 보드 */
+const CLI_TX = 0xFF89;   /* 보드 -> 호스트 */
+
+const PROMPT = 'cli# ';
+
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+let device = null;
+let rxChar = null;       /* 쓰기용 */
+let rxBuf  = '';         /* 수신 누적 */
+let waiter = null;       /* 프롬프트를 기다리는 중인 resolve */
+
+function say(text, kind) {
+  const el = $('msg');
+  el.textContent = text || '';
+  el.className = kind || '';
+}
+
+function termWrite(text) {
+  const el = $('term');
+  el.textContent += text;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setConnected(on) {
+  $('dot').classList.toggle('on', on);
+  $('btnConnect').disabled = on;
+  $('btnDisconnect').disabled = !on;
+  $('btnWifi').disabled = !on;
+  $('btnSend').disabled = !on;
+  $('cmd').disabled = !on;
+}
+
+/* 보드는 글자마다 에코를 돌려주고 끝에 프롬프트를 찍는다.
+ * 프롬프트가 보이면 한 명령이 끝난 것으로 본다. */
+function onNotify(event) {
+  const text = dec.decode(event.target.value);
+  rxBuf += text;
+  termWrite(text);
+
+  if (waiter && rxBuf.includes(PROMPT)) {
+    const done = waiter;
+    waiter = null;
+    done(rxBuf);
+  }
+}
+
+async function send(line, timeoutMs = 6000) {
+  if (!rxChar) throw new Error('연결되지 않았다');
+
+  rxBuf = '';
+  const answer = new Promise((resolve) => {
+    waiter = resolve;
+    setTimeout(() => {
+      if (waiter === resolve) { waiter = null; resolve(rxBuf); }
+    }, timeoutMs);
+  });
+
+  /* CLI 는 Enter 를 CR 로만 받는다. */
+  const data = enc.encode(line + '\r');
+
+  /* 한 번에 보낼 수 있는 크기는 MTU-3 이다. 협상값을 알 수 없으므로
+   * 최소 MTU 기준으로 자른다. */
+  for (let i = 0; i < data.length; i += 20) {
+    const chunk = data.slice(i, i + 20);
+    if (rxChar.writeValueWithoutResponse) await rxChar.writeValueWithoutResponse(chunk);
+    else                                  await rxChar.writeValue(chunk);
+  }
+
+  return answer;
+}
+
+/* CLI 출력은 "key   : value" 꼴이다. */
+function parseKV(text) {
+  const out = {};
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*([A-Za-z가-힣]+)\s*:\s*(.+?)\s*$/);
+    if (m && m[1] !== 'cli') out[m[1]] = m[2];
+  }
+  return out;
+}
+
+function renderInfo(rows) {
+  const dl = $('info');
+  dl.innerHTML = '';
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = k;
+    dd.textContent = v;
+    dl.append(dt, dd);
+  }
+}
+
+async function refresh() {
+  try {
+    const net = parseKV(await send('net info'));
+    const ble = parseKV(await send('ble info'));
+
+    renderInfo([
+      ['이름',   ble.name  || '—'],
+      ['상태',   net.state || '—'],
+      ['SSID',   net.ssid  || '—'],
+      ['IP',     net.ip    || '—'],
+      ['시각',   net.time  || '—'],
+      ['WiFi MAC', net.mac || '—'],
+      ['BT MAC', ble.mac   || '—'],
+    ]);
+
+    if (net.ssid && net.ssid !== '(없음)') $('ssid').value = net.ssid;
+  } catch (e) {
+    say(e.message, 'err');
+  }
+}
+
+async function connect() {
+  try {
+    say('장치를 고르는 중…');
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SVC] }],
+      optionalServices: [SVC],
+    });
+
+    device.addEventListener('gattserverdisconnected', () => {
+      setConnected(false);
+      say('연결이 끊겼다');
+    });
+
+    say('연결 중…');
+    const gatt = await device.gatt.connect();
+    const svc  = await gatt.getPrimaryService(SVC);
+
+    rxChar = await svc.getCharacteristic(CLI_RX);
+    const txChar = await svc.getCharacteristic(CLI_TX);
+
+    await txChar.startNotifications();
+    txChar.addEventListener('characteristicvaluechanged', onNotify);
+
+    setConnected(true);
+    say('연결됨', 'ok');
+    $('term').textContent = '';
+
+    await refresh();
+  } catch (e) {
+    say(e.message, 'err');
+    setConnected(false);
+  }
+}
+
+function disconnect() {
+  if (device && device.gatt.connected) device.gatt.disconnect();
+  setConnected(false);
+  say('');
+}
+
+$('btnConnect').addEventListener('click', connect);
+$('btnDisconnect').addEventListener('click', disconnect);
+
+$('wifiForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const ssid = $('ssid').value.trim();
+  const pass = $('pass').value;
+
+  if (!ssid) { say('SSID 를 입력할 것', 'err'); return; }
+
+  say('접속 요청 중…');
+  await send('net connect ' + ssid + (pass ? ' ' + pass : ''));
+
+  /* 접속과 DHCP 는 보드의 스레드가 진행한다. 잠시 뒤 상태를 다시 읽는다. */
+  say('보드가 접속 중이다. 잠시 뒤 상태를 갱신한다');
+  setTimeout(async () => { await refresh(); say('갱신됨', 'ok'); }, 8000);
+});
+
+$('btnSend').addEventListener('click', () => $('cmd').dispatchEvent(
+  new KeyboardEvent('keydown', { key: 'Enter' })));
+
+$('cmd').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  const line = $('cmd').value;
+  $('cmd').value = '';
+  await send(line);
+});
+
+if (!navigator.bluetooth) {
+  say('이 브라우저는 Web Bluetooth 를 지원하지 않는다. Chrome 이나 Edge 를 쓸 것', 'err');
+  $('btnConnect').disabled = true;
+}
+</script>
+</body>
+</html>
