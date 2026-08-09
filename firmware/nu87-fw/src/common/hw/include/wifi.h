@@ -14,7 +14,12 @@ bool wifiInit(void);
 bool wifiOn(void);
 bool wifiOff(void);
 bool wifiIsOn(void);
+bool wifiIsConnected(void);
 bool wifiConnect(const char *ssid, const char *pass);
+bool wifiDisconnect(void);
+bool wifiGetMac(char *p_str, uint32_t length);
+bool wifiGetIp(uint8_t *p_ip);
+bool wifiDhcpStart(void);
 
 #endif
 

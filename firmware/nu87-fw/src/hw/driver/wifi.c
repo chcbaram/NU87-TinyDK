@@ -90,28 +90,67 @@ bool wifiIsOn(void)
   return is_on;
 }
 
+bool wifiIsConnected(void)
+{
+  if (!is_on) return false;
+
+  return (wifi_is_connected_to_ap() == RTW_SUCCESS);
+}
+
+/* 연결만 한다. IP 는 아직 없다. DHCP 를 언제 돌릴지는 상위 모듈이 정한다. */
 bool wifiConnect(const char *ssid, const char *pass)
 {
   rtw_security_t sec = (pass != NULL && pass[0] != 0) ? RTW_SECURITY_WPA2_AES_PSK
                                                       : RTW_SECURITY_OPEN;
-  int ret;
 
   if (!wifiOn()) return false;
 
-  ret = wifi_connect((char *)ssid, sec,
-                     (char *)(pass ? pass : ""),
-                     strlen(ssid),
-                     pass ? strlen(pass) : 0,
-                     -1, NULL);
+  return (wifi_connect((char *)ssid, sec,
+                       (char *)(pass ? pass : ""),
+                       strlen(ssid),
+                       pass ? strlen(pass) : 0,
+                       -1, NULL) == RTW_SUCCESS);
+}
 
-  if (ret != RTW_SUCCESS)
-  {
-    return false;
-  }
+bool wifiDisconnect(void)
+{
+  if (!is_on) return true;
 
-  /* 연결만으로는 IP 가 없다. DHCP 는 상위 모듈로 옮길 정책이지만
-   * 지금은 하드웨어 경로 검증을 위해 여기서 돌린다. */
+  LwIP_DHCP(0, DHCP_STOP);
+
+  return (wifi_disconnect() == RTW_SUCCESS);
+}
+
+bool wifiDhcpStart(void)
+{
+  if (!wifiIsConnected()) return false;
+
   return (LwIP_DHCP(0, DHCP_START) == DHCP_ADDRESS_ASSIGNED);
+}
+
+bool wifiGetMac(char *p_str, uint32_t length)
+{
+  /* wifi_get_mac_address() 는 "xx:xx:.." 문자열을 strcpy 한다.
+   * 6 바이트 버퍼를 주면 스택을 넘긴다. */
+  char mac[32] = {0};
+
+  if (!is_on || length < sizeof(mac)) return false;
+
+  wifi_get_mac_address(mac);
+  strncpy(p_str, mac, length - 1);
+  p_str[length - 1] = 0;
+  return true;
+}
+
+bool wifiGetIp(uint8_t *p_ip)
+{
+  uint8_t *p_addr;
+
+  if (!is_on) return false;
+
+  p_addr = LwIP_GetIP(&xnetif[0]);
+  memcpy(p_ip, p_addr, 4);
+  return true;
 }
 
 

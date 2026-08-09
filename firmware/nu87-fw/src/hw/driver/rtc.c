@@ -1,5 +1,18 @@
-#include "rtc.h"
+/*
+ * rtc.c — RTC (RTL8720DF)
+ *
+ * 이 RTC 는 날짜를 모른다. 9비트 Days(0~511) 와 시:분:초만 센다.
+ * 그래서 "기준 자정의 epoch" 를 백업 레지스터에 두고 실제 시각을 이렇게 만든다.
+ *
+ *     epoch = base + Days*86400 + H*3600 + M*60 + S
+ *
+ * 백업 레지스터는 always-on 도메인이라 리셋으로 지워지지 않는다. RTC 도 같은
+ * 도메인이라 둘은 항상 같이 살고 같이 죽는다.
+ *
+ * Days 가 넘치기 전에 다시 기준을 잡는다. rtcGetEpochTime() 이 그 일을 한다.
+ */
 
+#include "rtc.h"
 
 
 #ifdef _USE_HW_RTC
@@ -7,229 +20,208 @@
 #include <time.h>
 
 
+/* REG0/6/7 은 시스템 몫이고 REG2 는 생산 테스트가 쓴다. REG1 은 문서상 사용자
+ * 영역이지만 실측하면 소프트 리셋마다 0 으로 지워진다(REG3~5 는 유지된다). */
+#define RTC_BKUP_BASE       BKUP_REG3        /* 기준 자정의 epoch. 0 이면 시각 미설정 */
+#define RTC_BKUP_USER       BKUP_REG4        /* 여기부터 rtcSetReg/rtcGetReg 몫 */
+#define RTC_BKUP_USER_MAX   2                /* REG4 ~ REG5 */
+
+#define RTC_REBASE_DAYS     400              /* Days 는 9비트라 511 이 한계다 */
+
+/* 시각을 아직 못 받았을 때 읽히는 값. rtc_date_t 의 year 는 2000 기준 오프셋이라
+ * epoch 0(1970) 을 그대로 내보내면 음수가 되어 날짜가 깨진다. */
+#define RTC_EPOCH_UNSET     1767225600UL     /* 2026-01-01 00:00:00 UTC */
+
+
+static bool is_init = false;
+
+static uint32_t rtcCivilToEpoch(uint32_t year, uint32_t month, uint32_t day,
+                                uint32_t hour, uint32_t min, uint32_t sec);
+
 #ifdef _USE_HW_CLI
 static void cliRtc(cli_args_t *args);
 #endif
-
-static RTC_HandleTypeDef hrtc;
-static bool is_init = false;
-
 
 
 
 
 bool rtcInit(void)
 {
-  bool ret = true;
-  RTC_PrivilegeStateTypeDef privilegeState = {0};
+  RTC_InitTypeDef rtc_init;
 
-  hrtc.Instance = RTC;
-  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
-  hrtc.Init.AsynchPrediv = 127;
-  hrtc.Init.SynchPrediv = 255;
-  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
-  hrtc.Init.OutPutRemap = RTC_OUTPUT_REMAP_NONE;  
-  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
-  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
-  hrtc.Init.OutPutRemap = RTC_OUTPUT_REMAP_NONE;
-  if (HAL_RTC_Init(&hrtc) != HAL_OK)
-  {
-    ret = false;
-  }
+  RCC_PeriphClockSource_RTC(0);
 
-  privilegeState.rtcPrivilegeFull = RTC_PRIVILEGE_FULL_NO;
-  privilegeState.backupRegisterPrivZone = RTC_PRIVILEGE_BKUP_ZONE_NONE;
-  privilegeState.backupRegisterStartZone2 = RTC_BKP_DR0;
-  privilegeState.backupRegisterStartZone3 = RTC_BKP_DR0;
-  if (HAL_RTCEx_PrivilegeModeSet(&hrtc, &privilegeState) != HAL_OK)
-  {
-    Error_Handler();
-  }
+  RTC_StructInit(&rtc_init);
+  rtc_init.RTC_HourFormat = RTC_HourFormat_24;
+  RTC_Init(&rtc_init);
 
-  logPrintf("[%s] rtcInit()\n", ret ? "OK":"E_");
-  is_init = ret;
+  /* shadow 를 거치면 읽을 때마다 동기화를 기다려야 한다. */
+  RTC_BypassShadowCmd(ENABLE);
+
+  is_init = true;
 
 #ifdef _USE_HW_CLI
   cliAdd("rtc", cliRtc);
 #endif
-  return ret;
+
+  logPrintf("[OK] rtcInit()\n");
+  return true;
 }
 
 bool rtcGetInfo(rtc_info_t *rtc_info)
 {
-  RTC_TimeTypeDef sTime = {0};
-  RTC_DateTypeDef sDate = {0};
+  time_t     now = (time_t)rtcGetEpochTime();
+  struct tm *p_tm = gmtime(&now);
 
+  if (p_tm == NULL) return false;
 
-  if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
+  rtc_info->time.hours   = p_tm->tm_hour;
+  rtc_info->time.minutes = p_tm->tm_min;
+  rtc_info->time.seconds = p_tm->tm_sec;
 
-  if (HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  rtc_info->time.hours = sTime.Hours;
-  rtc_info->time.minutes = sTime.Minutes;
-  rtc_info->time.seconds = sTime.Seconds;
-
-  rtc_info->date.year = sDate.Year;
-  rtc_info->date.month = sDate.Month;
-  rtc_info->date.day = sDate.Date;
+  rtc_info->date.year    = (p_tm->tm_year + 1900) - 2000;
+  rtc_info->date.month   = p_tm->tm_mon + 1;
+  rtc_info->date.day     = p_tm->tm_mday;
+  rtc_info->date.week    = p_tm->tm_wday;
 
   return true;
 }
 
 bool rtcGetTime(rtc_time_t *rtc_time)
 {
-  RTC_TimeTypeDef sTime = {0};
-  RTC_DateTypeDef sDate = {0};
+  rtc_info_t info;
 
+  if (rtcGetInfo(&info) == false) return false;
 
-  if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  if (HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  rtc_time->hours = sTime.Hours;
-  rtc_time->minutes = sTime.Minutes;
-  rtc_time->seconds = sTime.Seconds;
-
+  *rtc_time = info.time;
   return true;
 }
 
 bool rtcGetDate(rtc_date_t *rtc_date)
 {
-  RTC_TimeTypeDef sTime = {0};
-  RTC_DateTypeDef sDate = {0};
+  rtc_info_t info;
 
+  if (rtcGetInfo(&info) == false) return false;
 
-  if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  if (HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  rtc_date->year = sDate.Year;
-  rtc_date->month = sDate.Month;
-  rtc_date->day = sDate.Date;
-
-
-  struct tm  timeinfo;
-
-  memset(&timeinfo, 0, sizeof(timeinfo));
-  timeinfo.tm_year  = (2000 + sDate.Year) - 1900;
-  timeinfo.tm_mon   = sDate.Month - 1;
-  timeinfo.tm_mday  = sDate.Date;
-  timeinfo.tm_hour  = sTime.Hours;
-  timeinfo.tm_min   = sTime.Minutes;
-  timeinfo.tm_sec   = sTime.Seconds;
-
-  mktime(&timeinfo);
-
-  rtc_date->week = timeinfo.tm_wday;
-
+  *rtc_date = info.date;
   return true;
 }
 
 bool rtcSetTime(rtc_time_t *rtc_time)
 {
-  RTC_TimeTypeDef sTime = {0};
-  RTC_DateTypeDef sDate = {0};
+  rtc_info_t info;
 
+  if (rtcGetInfo(&info) == false) return false;
 
-  if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  if (HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  sTime.Hours = rtc_time->hours;
-  sTime.Minutes = rtc_time->minutes;
-  sTime.Seconds = rtc_time->seconds;
-
-  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  return true;
+  info.time = *rtc_time;
+  return rtcSetInfo(&info);
 }
 
 bool rtcSetDate(rtc_date_t *rtc_date)
 {
-  RTC_TimeTypeDef sTime = {0};
-  RTC_DateTypeDef sDate = {0};
+  rtc_info_t info;
 
+  if (rtcGetInfo(&info) == false) return false;
 
-  if (HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  if (HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  sDate.Year = rtc_date->year;
-  sDate.Month = rtc_date->month;
-  sDate.Date = rtc_date->day;
-
-  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
-    return false;
-
-  return true;
+  info.date = *rtc_date;
+  return rtcSetInfo(&info);
 }
 
-void HAL_RTC_MspInit(RTC_HandleTypeDef* rtcHandle)
+bool rtcSetInfo(rtc_info_t *rtc_info)
 {
-  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
- 
-  if(rtcHandle->Instance==RTC)
-  {
-    /** Initializes the peripherals clock
-    */
-    PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
-    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
-    {
-      Error_Handler();
-    }
+  return rtcSetEpochTime(rtcCivilToEpoch(2000 + rtc_info->date.year,
+                                         rtc_info->date.month,
+                                         rtc_info->date.day,
+                                         rtc_info->time.hours,
+                                         rtc_info->time.minutes,
+                                         rtc_info->time.seconds));
+}
 
-    /* RTC clock enable */
-    __HAL_RCC_RTC_ENABLE();
-    __HAL_RCC_RTCAPB_CLK_ENABLE();
+uint32_t rtcGetEpochTime(void)
+{
+  RTC_TimeTypeDef rtc_time;
+  uint32_t base = BKUP_Read(RTC_BKUP_BASE);
+  uint32_t sec_of_day;
+  bool     is_set = (base != 0);
+
+  if (!is_set) base = RTC_EPOCH_UNSET;
+
+  RTC_GetTime(RTC_Format_BIN, &rtc_time);
+
+  sec_of_day = rtc_time.RTC_Hours * 3600UL
+             + rtc_time.RTC_Minutes * 60UL
+             + rtc_time.RTC_Seconds;
+
+  /* Days 가 한계에 닿기 전에 기준을 오늘로 당긴다. 시:분:초는 건드리지 않으므로
+   * 이 재조정으로 시각이 흔들리지 않는다. */
+  if (is_set && rtc_time.RTC_Days >= RTC_REBASE_DAYS)
+  {
+    base += (uint32_t)rtc_time.RTC_Days * 86400UL;
+    BKUP_Write(RTC_BKUP_BASE, base);
+
+    rtc_time.RTC_Days = 0;
+    RTC_SetTime(RTC_Format_BIN, &rtc_time);
+
+    return base + sec_of_day;
   }
+
+  return base + (uint32_t)rtc_time.RTC_Days * 86400UL + sec_of_day;
+}
+
+bool rtcIsTimeSet(void)
+{
+  return (BKUP_Read(RTC_BKUP_BASE) != 0);
+}
+
+bool rtcSetEpochTime(uint32_t epoch)
+{
+  RTC_TimeTypeDef rtc_time;
+  uint32_t        sec_of_day = epoch % 86400UL;
+
+  RTC_TimeStructInit(&rtc_time);
+  rtc_time.RTC_Days    = 0;
+  rtc_time.RTC_Hours   = sec_of_day / 3600UL;
+  rtc_time.RTC_Minutes = (sec_of_day % 3600UL) / 60UL;
+  rtc_time.RTC_Seconds = sec_of_day % 60UL;
+
+  if (RTC_SetTime(RTC_Format_BIN, &rtc_time) != _SUCCESS) return false;
+
+  BKUP_Write(RTC_BKUP_BASE, epoch - sec_of_day);
+  return true;
 }
 
 bool rtcSetReg(uint32_t index, uint32_t data)
 {
-  if (IS_RTC_BKP(index))
-  {
-    HAL_RTCEx_BKUPWrite(&hrtc, index, data);
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  if (index >= RTC_BKUP_USER_MAX) return false;
+
+  BKUP_Write(RTC_BKUP_USER + index, data);
+  return true;
 }
 
 bool rtcGetReg(uint32_t index, uint32_t *p_data)
 {
-  if (IS_RTC_BKP(index))
-  {
-    *p_data = HAL_RTCEx_BKUPRead(&hrtc, index);
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  if (index >= RTC_BKUP_USER_MAX) return false;
+
+  *p_data = BKUP_Read(RTC_BKUP_USER + index);
+  return true;
 }
 
-void HAL_RTC_MspDeInit(RTC_HandleTypeDef* rtcHandle)
+/* 그레고리력 -> epoch. Howard Hinnant 의 days_from_civil 이다.
+ * 3월을 한 해의 시작으로 옮기면 윤일이 400년 주기(era)의 맨 끝으로 가서
+ * 분기 없이 나눗셈만으로 일수가 나온다. 719468 은 0000-03-01 부터 1970-01-01 까지의 일수다. */
+static uint32_t rtcCivilToEpoch(uint32_t year, uint32_t month, uint32_t day,
+                                uint32_t hour, uint32_t min, uint32_t sec)
 {
+  int32_t y = (int32_t)year - (month <= 2);
+  int32_t era = y / 400;
+  int32_t yoe = y - era * 400;
+  int32_t doy = (153 * ((int32_t)month + (month > 2 ? -3 : 9)) + 2) / 5 + (int32_t)day - 1;
+  int32_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  int32_t days = era * 146097 + doe - 719468;
 
-  if(rtcHandle->Instance==RTC)
-  {
-    __HAL_RCC_RTC_DISABLE();
-  }
+  return (uint32_t)days * 86400UL + hour * 3600UL + min * 60UL + sec;
 }
+
 
 #ifdef _USE_HW_CLI
 void cliRtc(cli_args_t *args)
@@ -239,25 +231,28 @@ void cliRtc(cli_args_t *args)
 
   if (args->argc == 1 && args->isStr(0, "info"))
   {
-    cliPrintf("is_init : %d\n", is_init);
+    rtc_info_t info;
+
+    rtcGetInfo(&info);
+    cliPrintf("init  : %s\n", is_init ? "True" : "False");
+    cliPrintf("set   : %s\n", rtcIsTimeSet() ? "True" : "False");
+    cliPrintf("epoch : %u\n", (unsigned int)rtcGetEpochTime());
+    cliPrintf("time  : 20%02d-%02d-%02d %02d:%02d:%02d (UTC)\n",
+              info.date.year, info.date.month, info.date.day,
+              info.time.hours, info.time.minutes, info.time.seconds);
     ret = true;
   }
 
   if (args->argc == 2 && args->isStr(0, "get") && args->isStr(1, "info"))
   {
-    rtc_info_t rtc_info;
+    rtc_info_t info;
 
-    while(cliKeepLoop())
+    while (cliKeepLoop())
     {
-      rtcGetInfo(&rtc_info);
-
-      cliPrintf("Y:%02d M:%02d D:%02d, H:%02d M:%02d S:%02d\n",
-                rtc_info.date.year,
-                rtc_info.date.month,
-                rtc_info.date.day,
-                rtc_info.time.hours,
-                rtc_info.time.minutes,
-                rtc_info.time.seconds);
+      rtcGetInfo(&info);
+      cliPrintf("20%02d-%02d-%02d %02d:%02d:%02d\n",
+                info.date.year, info.date.month, info.date.day,
+                info.time.hours, info.time.minutes, info.time.seconds);
       delay(1000);
     }
     ret = true;
@@ -267,15 +262,11 @@ void cliRtc(cli_args_t *args)
   {
     rtc_time_t rtc_time;
 
-    rtc_time.hours = args->getData(2);
+    rtc_time.hours   = args->getData(2);
     rtc_time.minutes = args->getData(3);
     rtc_time.seconds = args->getData(4);
 
-    rtcSetTime(&rtc_time);
-    cliPrintf("H:%02d M:%02d S:%02d\n",
-              rtc_time.hours,
-              rtc_time.minutes,
-              rtc_time.seconds);
+    cliPrintf("rtc set time : %s\n", rtcSetTime(&rtc_time) ? "OK" : "Fail");
     ret = true;
   }
 
@@ -283,18 +274,20 @@ void cliRtc(cli_args_t *args)
   {
     rtc_date_t rtc_date;
 
-    rtc_date.year = args->getData(2);
+    rtc_date.year  = args->getData(2);
     rtc_date.month = args->getData(3);
-    rtc_date.day = args->getData(4);
+    rtc_date.day   = args->getData(4);
 
-    rtcSetDate(&rtc_date);
-    cliPrintf("Y:%02d M:%02d D:%02d\n",
-              rtc_date.year,
-              rtc_date.month,
-              rtc_date.day);
+    cliPrintf("rtc set date : %s\n", rtcSetDate(&rtc_date) ? "OK" : "Fail");
     ret = true;
   }
 
+  if (args->argc == 3 && args->isStr(0, "set") && args->isStr(1, "epoch"))
+  {
+    cliPrintf("rtc set epoch : %s\n",
+              rtcSetEpochTime((uint32_t)args->getData(2)) ? "OK" : "Fail");
+    ret = true;
+  }
 
   if (ret == false)
   {
@@ -302,6 +295,7 @@ void cliRtc(cli_args_t *args)
     cliPrintf("rtc get info\n");
     cliPrintf("rtc set time [h] [m] [s]\n");
     cliPrintf("rtc set date [y] [m] [d]\n");
+    cliPrintf("rtc set epoch [sec]\n");
   }
 }
 #endif

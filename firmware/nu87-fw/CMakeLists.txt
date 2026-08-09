@@ -188,9 +188,6 @@ set(EXCLUDE_PATHS
   fwlib/ram_hp/rtl8721dhp_sd.c            # pvPortMalloc / vPortFree
   fwlib/ram_hp/rtl8721dhp_simulation.c    # xTaskCreate / vTaskDelay
   fwlib/ram_common/rtl8721d_gdma_ram.c    # osdep_service.h
-
-  # 아직 RTL 용으로 작성하지 않은 우리 드라이버 (hw_def.h 에서 스위치도 꺼 두었다)
-  hw/driver/rtc.c
 )
 
 foreach(TMP_PATH ${SRC_FILES_RECURSE} ${SRC_FILES_VENDOR})

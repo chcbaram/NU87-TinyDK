@@ -37,8 +37,14 @@ bool rtcInit(void);
 bool rtcGetInfo(rtc_info_t *rtc_info);
 bool rtcGetTime(rtc_time_t *rtc_time);
 bool rtcGetDate(rtc_date_t *rtc_date);
+bool rtcSetInfo(rtc_info_t *rtc_info);
 bool rtcSetTime(rtc_time_t *rtc_time);
 bool rtcSetDate(rtc_date_t *rtc_date);
+
+/* UTC 기준 1970-01-01 부터의 초. SNTP 가 주는 값이 이 단위다. */
+uint32_t rtcGetEpochTime(void);
+bool     rtcSetEpochTime(uint32_t epoch);
+bool     rtcIsTimeSet(void);
 
 bool rtcSetReg(uint32_t index, uint32_t data);
 bool rtcGetReg(uint32_t index, uint32_t *p_data);

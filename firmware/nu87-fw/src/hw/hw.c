@@ -53,6 +53,7 @@ bool hwInit(void)
   logPrintf("\n");
 
   resetInit();
+  rtcInit();
   gpioInit();
   ipcInit();
   /* nvs 는 플래시를 쓴다. FLASH_Write_Lock() 이 IPC 로 KM0 를 재우고 응답을
