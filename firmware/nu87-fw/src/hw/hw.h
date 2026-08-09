@@ -12,6 +12,7 @@ extern "C" {
 #include "led.h"
 #include "gpio.h"
 #include "ipc.h"
+#include "nvs.h"
 #include "reset.h"
 #include "wifi.h"
 #include "uart.h"

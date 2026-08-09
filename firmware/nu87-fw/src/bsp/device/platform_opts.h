@@ -18,14 +18,7 @@
 /* SDK 의 monitor shell 은 쓰지 않는다. CLI 는 common/hw/src/cli.c 가 담당한다. */
 #define CONFIG_LOG_HISTORY          0
 #define CONFIG_LOG_SERVICE_LOCK     0
-#define CONFIG_INTERACTIVE_MODE     0
-#define CONFIG_INTERACTIVE_EXT      0
 #define CONFIG_ATCMD_MP             0
-
-/* ── 네트워크 계층 (미사용) ──────────────────────────────────────────── */
-#define CONFIG_WLAN                 0
-#define CONFIG_LWIP_LAYER           0
-#define CONFIG_INIT_NET             0
 #define CONFIG_BSD_TCP              0
 
 /* ── 무선 / 네트워크 ─────────────────────────────────────────────────── */

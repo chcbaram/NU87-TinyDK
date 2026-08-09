@@ -102,8 +102,12 @@ component/soc/realtek/amebad/bootloader_2nd/                     -> bootloader_2
 component/soc/realtek/amebad/misc/rtl8721d_ota.c                 -> misc/rtl8721d_ota.c
 component/soc/realtek/amebad/misc/rtl8721d_freertos_pmu.h        -> misc/rtl8721d_freertos_pmu.h
 
-# ── 파라미터 저장 (common/hw/include/nvs.h 대응) ──────────────────────────
+# ── 파라미터 저장 ─────────────────────────────────────────────────────────
 #  FTL = Flash Translation Layer. 웨어레벨링 있는 소형 KV 저장소.
+#  nvs.c 는 이것을 쓰지 않는다. ftl.c 가 flash_api -> objects.h -> device.h 로
+#  mbed HAL 을 통째로 끌어오는데, 우리가 필요한 것은 섹터 하나 읽고 쓰기뿐이라
+#  ROM 플래시 API 를 직접 쓴다. 남겨둔 이유는 BLE 다. Realtek BT 스택이
+#  본딩키를 FTL 에 저장한다.
 component/common/file_system/ftl/                                -> file_system/ftl/
 component/common/file_system/kv/                                 -> file_system/kv/
 
