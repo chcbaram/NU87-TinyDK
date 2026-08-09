@@ -77,14 +77,14 @@
   button:disabled { opacity: .45; cursor: default; }
   button[hidden] { display: none; }
 
-  .tabs { display: flex; flex: none; padding: 0 10px; background: var(--panel);
-          border-bottom: 1px solid var(--line); }
+  /* 바를 하나 더 쌓지 않고 내용 위에 세그먼트로 둔다. */
+  .tabs { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 18px;
+          background: var(--line); border-radius: 9px; }
   .tabs button {
-    border: none; background: none; border-radius: 0; padding: 10px 14px;
-    color: var(--dim); border-bottom: 2px solid transparent; margin-bottom: -1px;
-    display: flex; align-items: center; gap: 6px;
+    border: none; background: none; border-radius: 7px; padding: 6px 16px;
+    color: var(--dim); display: flex; align-items: center; gap: 6px;
   }
-  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .tabs button.on { background: var(--panel); color: var(--text); font-weight: 600; }
   .badge { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
   .badge.on { background: var(--ok); }
 
@@ -133,16 +133,19 @@
          margin: 10px 0; }
   .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
-  /* 콘솔 — 바닥 고정 */
+  /* 콘솔 — 바닥 고정. 창이 낮으면 접어서 입력줄만 남긴다. */
   footer { flex: none; border-top: 1px solid var(--line); background: var(--panel);
-           padding: 10px 14px; }
-  .termbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+           padding: 8px 14px 10px; }
+  .termbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .termbar h2 { margin: 0; flex: 1; }
+  .termbar button { padding: 4px 10px; font-size: 13px; }
   #term {
     font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
     background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
-    padding: 10px; height: 150px; overflow-y: auto; margin-bottom: 8px;
+    padding: 10px; height: 120px; min-height: 60px; overflow-y: auto; margin-bottom: 8px;
+    resize: vertical;   /* 오른쪽 아래 모서리를 끌어 높이를 바꾼다 */
   }
+  footer.fold #term { display: none; }
   .cmdline { display: flex; gap: 8px; }
   .cmdline input { font-family: var(--mono); flex: 1; min-width: 0; }
 </style>
@@ -160,13 +163,13 @@
   <button id="btnDisconnect" disabled>해제</button>
 </header>
 
-<nav class="tabs">
-  <button class="on" data-tab="board">보드</button>
-  <button data-tab="wifi">WiFi <span class="badge" id="badgeNet"></span></button>
-  <button data-tab="fw">펌웨어</button>
-</nav>
-
 <main>
+  <nav class="tabs">
+    <button class="on" data-tab="board">보드</button>
+    <button data-tab="wifi">WiFi <span class="badge" id="badgeNet"></span></button>
+    <button data-tab="fw">펌웨어</button>
+  </nav>
+
   <section id="tab-board" class="on">
     <div id="msg"></div>
     <h2>보드</h2>
@@ -218,6 +221,7 @@
 <footer>
   <div class="termbar">
     <h2>콘솔</h2>
+    <button id="btnFold">접기</button>
     <button id="btnClear">지우기</button>
   </div>
   <div id="term"></div>
@@ -663,6 +667,11 @@ $('btnDisconnect').addEventListener('click', disconnect);
 $('btnRefresh').addEventListener('click', refresh);
 $('btnScan').addEventListener('click', scan);
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
+
+$('btnFold').addEventListener('click', () => {
+  const fold = document.querySelector('footer').classList.toggle('fold');
+  $('btnFold').textContent = fold ? '펴기' : '접기';
+});
 
 $('btnFlash').addEventListener('click', () => {
   const file = $('fwFile').files[0];
