@@ -9,14 +9,18 @@ flash.py 와 다르다. flash.py 는 다운로드 모드로 진입시켜 플래�
 
     python3 ota.py --port /dev/tty.usbserial-0001 --image km0_km4_image2.bin
     python3 ota.py --host nu87-tinydk.local      --image km0_km4_image2.bin
+    python3 ota.py --ble                         --image km0_km4_image2.bin
 
-USB 는 선이 하나라 CLI 와 데이터가 같은 곳으로 흐른다. WiFi 는 CLI(텔넷 23)와
-데이터(5000)를 따로 열어 굵은 흐름이 CLI 에코에 끼지 않게 한다.
+USB 는 선이 하나라 CLI 와 데이터가 같은 곳으로 흐른다. WiFi(텔넷 23 / 데이터
+5000)와 BLE(0xFF88·89 / 0xFF8A·8B)는 둘을 따로 열어 굵은 흐름이 CLI 에코에
+끼지 않게 한다.
 """
 
 import argparse
+import asyncio
 import socket
 import sys
+import threading
 import time
 import zlib
 
@@ -32,15 +36,24 @@ RESEND_MAX = 5
 
 TELNET_PORT = 23
 DATA_PORT = 5000
-DATA_CH = 5           # HW_UART_CH_NET_DATA (_DEF_UART5)
+NET_DATA_CH = 5       # HW_UART_CH_NET_DATA (_DEF_UART5)
+
+BLE_NAME = "NU87-TINYDK"
+BLE_CLI_RX = "0000ff88-0000-1000-8000-00805f9b34fb"
+BLE_CLI_TX = "0000ff89-0000-1000-8000-00805f9b34fb"
+BLE_DAT_RX = "0000ff8a-0000-1000-8000-00805f9b34fb"
+BLE_DAT_TX = "0000ff8b-0000-1000-8000-00805f9b34fb"
+BLE_DATA_CH = 4       # HW_UART_CH_BLE_DATA (_DEF_UART4)
+BLE_MTU = 244         # 협상값을 모르므로 흔한 MTU(247) 기준으로 자른다
 
 
 class Link:
     """CLI 와 데이터를 같은 얼굴로 다룬다. 통로가 하나든 둘이든 위쪽은 모른다."""
 
-    def __init__(self, cli, dat):
+    def __init__(self, cli, dat, data_ch=None):
         self.cli = cli
         self.dat = dat
+        self.data_ch = data_ch      # None 이면 CLI 채널로 받는다 (USB)
 
     def write_cli(self, data):
         self.cli.write(data)
@@ -91,6 +104,80 @@ class SockIO:
 
 class OtaError(Exception):
     pass
+
+
+class BleLink:
+    """bleak 은 async 다. 배경 스레드에서 이벤트 루프를 돌리고 동기 얼굴만 내놓는다.
+    그래야 전송 루프를 통로마다 따로 쓰지 않아도 된다."""
+
+    class Face:
+        def __init__(self, owner, rx_uuid, buf):
+            self.owner = owner
+            self.rx_uuid = rx_uuid
+            self.buf = buf
+
+        def write(self, data):
+            self.owner.write(self.rx_uuid, data)
+
+        def read(self, n=1):
+            if not self.buf:
+                time.sleep(0.005)
+                return b""
+            take = bytes(self.buf[:n])
+            del self.buf[:n]
+            return take
+
+        def close(self):
+            self.owner.close()
+
+    def __init__(self, name):
+        try:
+            from bleak import BleakClient, BleakScanner
+        except ImportError:
+            raise OtaError("bleak 이 필요하다: pip3 install bleak")
+
+        self.BleakClient = BleakClient
+        self.BleakScanner = BleakScanner
+        self.cli_buf = bytearray()
+        self.dat_buf = bytearray()
+        self.client = None
+
+        self.loop = asyncio.new_event_loop()
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
+        self._run(self._connect(name), 40)
+
+    def _run(self, coro, timeout):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
+
+    async def _connect(self, name):
+        dev = await self.BleakScanner.find_device_by_name(name, timeout=15.0)
+        if dev is None:
+            raise OtaError(f"'{name}' 를 찾지 못했다")
+
+        self.client = self.BleakClient(dev)
+        await self.client.connect()
+
+        # CLI TX 를 구독해야 보드가 CLI 를 BLE 쪽으로 넘긴다
+        await self.client.start_notify(BLE_CLI_TX, lambda _, x: self.cli_buf.extend(x))
+        await self.client.start_notify(BLE_DAT_TX, lambda _, x: self.dat_buf.extend(x))
+        await asyncio.sleep(1.0)
+
+    def write(self, uuid, data):
+        async def go():
+            for i in range(0, len(data), BLE_MTU):
+                await self.client.write_gatt_char(uuid, data[i:i + BLE_MTU], response=False)
+
+        self._run(go(), 30)
+
+    def close(self):
+        if self.client is None:
+            return
+        try:
+            self._run(self.client.disconnect(), 10)
+        except Exception:
+            pass
+        self.client = None
+        self.loop.call_soon_threadsafe(self.loop.stop)
 
 
 def read_line(io, timeout=ACK_TIMEOUT):
@@ -147,7 +234,7 @@ def update(link, image, show_info=None):
             print("  " + line)
 
     link.flush_in()
-    ch = f" {DATA_CH}" if link.cli is not link.dat else ""
+    ch = f" {link.data_ch}" if link.data_ch else ""
     link.write_cli(f"ota write {len(payload)} {crc}{ch}\r\n".encode())
     wait_for(link.dat, "ready", timeout=20.0)
 
@@ -197,6 +284,13 @@ def open_serial(port, baud):
     return Link(io, io), [l for l in lines if l.startswith(("실행", "대상", "ver"))]
 
 
+def open_ble(name):
+    link = BleLink(name)
+    cli = BleLink.Face(link, BLE_CLI_RX, link.cli_buf)
+    dat = BleLink.Face(link, BLE_DAT_RX, link.dat_buf)
+    return Link(cli, dat, BLE_DATA_CH), []
+
+
 def open_net(host):
     """CLI 는 텔넷, 데이터는 전용 포트. 텔넷은 붙자마자 IAC 협상을 보내는데
     우리는 줄 단위로만 읽으므로 그 바이트는 read_line 이 알아서 버린다.
@@ -211,7 +305,7 @@ def open_net(host):
 
     dat = SockIO(host, DATA_PORT)
     time.sleep(0.5)
-    return Link(cli, dat), []
+    return Link(cli, dat, NET_DATA_CH), []
 
 
 def main():
@@ -219,6 +313,8 @@ def main():
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--port", help="USB 시리얼 포트")
     src.add_argument("--host", help="WiFi. 이름이나 IP (예: nu87-tinydk.local)")
+    src.add_argument("--ble", nargs="?", const=BLE_NAME, metavar="NAME",
+                     help=f"BLE. 광고 이름 (기본 {BLE_NAME})")
     parser.add_argument("--image", required=True)
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--reset", action="store_true", help="끝나면 재부팅까지")
@@ -228,8 +324,10 @@ def main():
     try:
         if args.port:
             link, info = open_serial(args.port, args.baud)
-        else:
+        elif args.host:
             link, info = open_net(args.host)
+        else:
+            link, info = open_ble(args.ble)
 
         update(link, args.image, info)
 

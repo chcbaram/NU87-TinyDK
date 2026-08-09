@@ -132,14 +132,36 @@
     // flash.py 와 다르다. 다운로드 모드로 진입시키지 않고, 돌고 있는 펌웨어의
     // CLI 로 반대편 OTA 슬롯에 쓴다. 실패해도 지금 슬롯이 남아 보드가 죽지 않는다.
     {
-      "label": "ota-update",
+      "label": "ota-update · USB",
       "type": "shell",
-      "detail": "반대편 슬롯에 밀어넣는다 · 포트 선택",
+      "detail": "USB 로 밀어넣는다 · 포트 선택 (실측 10 KB/s)",
       "dependsOn": "build-build",
       "windows": {
         "command": "python ../firm-sdk/tools/ota.py --port ${input:port} --image build/km0_km4_image2.bin"
       },
       "command": "python3 ../firm-sdk/tools/ota.py --port ${input:port} --image build/km0_km4_image2.bin",
+      "problemMatcher": []
+    },
+    {
+      "label": "ota-update · WiFi",
+      "type": "shell",
+      "detail": "WiFi 로 밀어넣는다. 가장 빠르다 (실측 56 KB/s)",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/ota.py --host ${input:host} --image build/km0_km4_image2.bin"
+      },
+      "command": "python3 ../firm-sdk/tools/ota.py --host ${input:host} --image build/km0_km4_image2.bin",
+      "problemMatcher": []
+    },
+    {
+      "label": "ota-update · BLE",
+      "type": "shell",
+      "detail": "BLE 로 밀어넣는다. 네트워크가 없을 때 (실측 9.7 KB/s). pip3 install bleak",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/ota.py --ble --image build/km0_km4_image2.bin"
+      },
+      "command": "python3 ../firm-sdk/tools/ota.py --ble --image build/km0_km4_image2.bin",
       "problemMatcher": []
     },
     {
@@ -298,6 +320,15 @@
         "prompt": "Baud rate",
         "value": "115200",
         "validateRegex": "^\\d+$"
+      }
+    },
+    {
+      "id": "host",
+      "type": "command",
+      "command": "firmware-task.promptInput",
+      "args": {
+        "prompt": "보드 주소",
+        "value": "nu87-tinydk.local"
       }
     },
     {
