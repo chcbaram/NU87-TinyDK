@@ -42,6 +42,10 @@ static const char *uart_name[UART_MAX_CH] =
 #ifdef _USE_HW_WIFI
   "NET      telnet",
 #endif
+#ifdef _USE_HW_BLE
+  "BLE      cli",
+  "BLE      data",
+#endif
 };
 
 static uart_tbl_t uart_tbl[UART_MAX_CH];

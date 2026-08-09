@@ -22,15 +22,26 @@
 #define _USE_HW_LED
 #define      HW_LED_MAX_CH          3
 
+/* 실제 하드웨어는 LOGUART 하나뿐이고 나머지는 가상 채널이다.
+ * 각 채널에 uart_driver_t 를 등록하면 상위는 무엇을 타는지 몰라도 된다. */
 #define _USE_HW_UART
+#define      HW_UART_CH_LOG         _DEF_UART1
+#define      HW_UART_CH_CLI         HW_UART_CH_LOG
 #ifdef _USE_HW_WIFI
+#define      HW_UART_CH_NET         _DEF_UART2   /* cli_net 이 텔넷 소켓을 물린다 */
+#endif
+#ifdef _USE_HW_BLE
+#define      HW_UART_CH_BLE         _DEF_UART3   /* cli_ble 가 GATT 를 물린다 */
+#define      HW_UART_CH_BLE_DATA    _DEF_UART4   /* 원시 데이터. 펌웨어 업데이트용 */
+#endif
+
+#if   defined(_USE_HW_BLE)
+#define      HW_UART_MAX_CH         4
+#elif defined(_USE_HW_WIFI)
 #define      HW_UART_MAX_CH         2
-#define      HW_UART_CH_NET         _DEF_UART2   /* 가상 채널. cli_net 이 소켓을 물린다 */
 #else
 #define      HW_UART_MAX_CH         1
 #endif
-#define      HW_UART_CH_LOG         _DEF_UART1
-#define      HW_UART_CH_CLI         HW_UART_CH_LOG
 
 #define _USE_HW_CLI
 #define      HW_CLI_CMD_LIST_MAX    32

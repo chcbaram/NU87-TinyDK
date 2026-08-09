@@ -38,6 +38,8 @@
 #include "osal/thread.h"
 
 #include "ble_svc.h"
+#include "uart.h"
+#include "qbuffer.h"
 
 #include "ftl_int.h"
 #include "rtk_coex.h"
@@ -55,6 +57,11 @@
 /* 본딩키 저장 영역. NVS 바로 앞이다 (docs/06 §6.4.1) */
 #define BLE_FTL_ADDR            0x003F8000
 #define BLE_FTL_PAGES           3
+
+#define BLE_RX_BUF_LEN          512
+#define BLE_SEND_CHUNK          20
+#define BLE_SEND_RETRY          200
+#define BLE_SEND_RETRY_MS       5
 
 
 static bool       is_init  = false;
@@ -78,10 +85,21 @@ static uint8_t adv_data[31] =
 static uint8_t adv_data_len = 3;
 
 
-static ble_rx_cb  rx_handler = NULL;
+/* 통로마다 받은 것을 담아 둔다. 상위는 폴링으로 꺼내 간다. */
+typedef struct
+{
+  uint8_t       ch;
+  qbuffer_t     rx_q;
+  uint8_t       rx_buf[BLE_RX_BUF_LEN];
+  uart_driver_t drv;
+} ble_pipe_t;
 
-static void bleThread(void *arg);
-static void bleStackStart(void);
+static ble_pipe_t pipe[BLE_SVC_CH_MAX];
+
+static uint8_t bleUartToSvcCh(uint8_t uart_ch);
+static void    blePipeInit(void);
+static void    bleThread(void *arg);
+static void    bleStackStart(void);
 static void bleGapParamInit(void);
 static void bleProfileInit(void);
 static void bleAdvDataSetName(void);
@@ -100,6 +118,7 @@ static void cliBle(cli_args_t *args);
 bool bleInit(void)
 {
   bleAdvDataSetName();
+  blePipeInit();
 
   is_init = true;
   state   = BLE_STATE_INIT;
@@ -151,30 +170,124 @@ bool bleGetMac(char *p_str, uint32_t length)
   return true;
 }
 
-bool bleSetRxHandler(ble_rx_cb handler)
+/* 호스트가 CCCD 를 켜야 보낼 수 있다. 연결만으로는 부족하다. */
+bool bleIsReady(uint8_t uart_ch)
 {
-  rx_handler = handler;
+  return (bleIsConnected() && bleSvcIsNotifyEnabled(bleUartToSvcCh(uart_ch)));
+}
+
+static uint8_t bleUartToSvcCh(uint8_t uart_ch)
+{
+  return (uart_ch == HW_UART_CH_BLE_DATA) ? BLE_SVC_CH_DATA : BLE_SVC_CH_CLI;
+}
+
+static void bleSvcRxCli(uint8_t id, uint8_t *p_data, uint16_t length)
+{
+  (void)id;
+  qbufferWrite(&pipe[BLE_SVC_CH_CLI].rx_q, p_data, length);
+}
+
+static void bleSvcRxData(uint8_t id, uint8_t *p_data, uint16_t length)
+{
+  (void)id;
+  qbufferWrite(&pipe[BLE_SVC_CH_DATA].rx_q, p_data, length);
+}
+
+static bool blePipeOpen(uint32_t baud)
+{
+  (void)baud;
   return true;
 }
 
-/* 호스트가 CCCD 를 켜야 보낼 수 있다. 연결만으로는 부족하다. */
-bool bleIsReady(void)
+static bool blePipeClose(void)
 {
-  return (bleIsConnected() && bleSvcIsNotifyEnabled());
+  return true;
 }
 
-bool bleSend(uint8_t *p_data, uint16_t length)
-{
-  if (bleIsReady() == false) return false;
+static uint32_t blePipeAvailCli(void)  { return qbufferAvailable(&pipe[BLE_SVC_CH_CLI].rx_q); }
+static uint32_t blePipeAvailData(void) { return qbufferAvailable(&pipe[BLE_SVC_CH_DATA].rx_q); }
+static bool     blePipeFlushCli(void)  { qbufferFlush(&pipe[BLE_SVC_CH_CLI].rx_q);  return true; }
+static bool     blePipeFlushData(void) { qbufferFlush(&pipe[BLE_SVC_CH_DATA].rx_q); return true; }
 
-  return bleSvcSend(conn_id, p_data, length);
+static uint8_t blePipeReadCli(void)
+{
+  uint8_t data = 0;
+  qbufferRead(&pipe[BLE_SVC_CH_CLI].rx_q, &data, 1);
+  return data;
 }
 
-static void bleSvcRx(uint8_t id, uint8_t *p_data, uint16_t length)
+static uint8_t blePipeReadData(void)
 {
-  (void)id;
+  uint8_t data = 0;
+  qbufferRead(&pipe[BLE_SVC_CH_DATA].rx_q, &data, 1);
+  return data;
+}
 
-  if (rx_handler != NULL) rx_handler(p_data, length);
+/* notify 한 번에 실을 수 있는 크기는 MTU-3 이다. 협상 결과를 모르는 상태에서도
+ * 안전하도록 최소 MTU(23) 기준으로 자른다.
+ *
+ * 스택의 송신 큐가 차면 server_send_data() 가 실패한다. 그냥 넘어가면 출력이
+ * 소리없이 잘린다 — help 목록이 중간에서 끊기는 식이다. 큐가 빌 때까지 잠깐
+ * 쉬었다 다시 넣는다. 여기는 CLI 스레드라 기다려도 된다. */
+static uint32_t blePipeWrite(uint8_t svc_ch, uint8_t *p_data, uint32_t length)
+{
+  uint32_t offset = 0;
+
+  if (bleIsConnected() == false || bleSvcIsNotifyEnabled(svc_ch) == false) return 0;
+
+  while (offset < length)
+  {
+    uint32_t size = ((length - offset) > BLE_SEND_CHUNK) ? BLE_SEND_CHUNK : (length - offset);
+    int      retry;
+
+    for (retry = 0; retry < BLE_SEND_RETRY; retry++)
+    {
+      if (bleSvcSend(svc_ch, conn_id, &p_data[offset], size)) break;
+      if (bleIsConnected() == false) return offset;
+      delay(BLE_SEND_RETRY_MS);
+    }
+    if (retry >= BLE_SEND_RETRY) break;
+
+    offset += size;
+  }
+
+  return offset;
+}
+
+static uint32_t blePipeWriteCli(uint8_t *p_data, uint32_t length)
+{
+  return blePipeWrite(BLE_SVC_CH_CLI, p_data, length);
+}
+
+static uint32_t blePipeWriteData(uint8_t *p_data, uint32_t length)
+{
+  return blePipeWrite(BLE_SVC_CH_DATA, p_data, length);
+}
+
+static void blePipeInit(void)
+{
+  const uint8_t uart_ch[BLE_SVC_CH_MAX] = { HW_UART_CH_BLE, HW_UART_CH_BLE_DATA };
+
+  for (int i = 0; i < BLE_SVC_CH_MAX; i++)
+  {
+    pipe[i].ch = uart_ch[i];
+    qbufferCreate(&pipe[i].rx_q, pipe[i].rx_buf, BLE_RX_BUF_LEN);
+
+    pipe[i].drv.open  = blePipeOpen;
+    pipe[i].drv.close = blePipeClose;
+
+    uartSetDriver(uart_ch[i], &pipe[i].drv);
+  }
+
+  pipe[BLE_SVC_CH_CLI].drv.available  = blePipeAvailCli;
+  pipe[BLE_SVC_CH_CLI].drv.flush      = blePipeFlushCli;
+  pipe[BLE_SVC_CH_CLI].drv.read       = blePipeReadCli;
+  pipe[BLE_SVC_CH_CLI].drv.write      = blePipeWriteCli;
+
+  pipe[BLE_SVC_CH_DATA].drv.available = blePipeAvailData;
+  pipe[BLE_SVC_CH_DATA].drv.flush     = blePipeFlushData;
+  pipe[BLE_SVC_CH_DATA].drv.read      = blePipeReadData;
+  pipe[BLE_SVC_CH_DATA].drv.write     = blePipeWriteData;
 }
 
 static void bleThread(void *arg)
@@ -282,7 +395,8 @@ static void bleProfileInit(void)
   server_init(2);
 
   nu87_srv_id = bleSvcAddService((void *)bleProfileCallback);
-  bleSvcSetRxHandler(bleSvcRx);
+  bleSvcSetRxHandler(BLE_SVC_CH_CLI,  bleSvcRxCli);
+  bleSvcSetRxHandler(BLE_SVC_CH_DATA, bleSvcRxData);
   bas_srv_id  = bas_add_service((void *)bleProfileCallback);
 
   /* server_init() 에 알린 개수만큼 등록되지 않으면 GATT 서버가 데이터베이스를

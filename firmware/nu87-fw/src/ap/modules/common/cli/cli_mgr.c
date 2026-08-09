@@ -3,6 +3,7 @@
 
 #ifdef _USE_HW_CLI
 #include "driver/cli_net.h"
+#include "driver/cli_ble.h"
 
 
 #define CLI_NET_PORT      23
@@ -54,9 +55,10 @@ void cliMgrThread(void *arg)
   {
     cliMain();
 
-#ifdef _USE_HW_WIFI
-    /* 채널 선택. 텔넷이 붙으면 그쪽으로 넘기되, 로컬 UART 에 입력이 들어오면
+#if defined(_USE_HW_WIFI) || defined(_USE_HW_BLE)
+    /* 채널 선택. 원격이 붙으면 그쪽으로 넘기되, 로컬 UART 에 입력이 들어오면
      * 언제든 되돌아온다. 원격에 물려 있어도 콘솔을 잃지 않는다. */
+#ifdef _USE_HW_WIFI
     cliNetPoll();
 
     if (cliNetIsConnected())
@@ -67,6 +69,20 @@ void cliMgrThread(void *arg)
     {
       cli_ch = HW_UART_CH_CLI;
     }
+#endif
+
+#ifdef _USE_HW_BLE
+    /* 텔넷보다 뒤에 본다. 둘 다 붙어 있으면 BLE 가 이긴다 — 텔넷은 네트워크가
+     * 살아 있을 때만 되고, BLE 는 네트워크가 죽었을 때 쓰는 마지막 통로다. */
+    if (cliBleIsConnected())
+    {
+      cli_ch = HW_UART_CH_BLE;
+    }
+    else if (cli_ch == HW_UART_CH_BLE)
+    {
+      cli_ch = HW_UART_CH_CLI;
+    }
+#endif
 
     if (uartAvailable(HW_UART_CH_CLI) > 0)
     {

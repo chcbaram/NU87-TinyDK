@@ -27,12 +27,13 @@ bool       bleIsConnected(void);
 bool       bleAdvertise(bool enable);
 bool       bleGetMac(char *p_str, uint32_t length);
 
-/* 바이트 통로. 프로토콜은 상위가 정한다. */
-typedef void (*ble_rx_cb)(uint8_t *p_data, uint16_t length);
-
-bool       bleSetRxHandler(ble_rx_cb handler);
-bool       bleSend(uint8_t *p_data, uint16_t length);
-bool       bleIsReady(void);
+/* 두 채널을 가상 UART 로 내보낸다. 상위는 uartRead/uartWrite 만 쓰면 되고
+ * 자기가 BLE 를 타는지 몰라도 된다.
+ *
+ *   HW_UART_CH_BLE        CLI       cli_mgr 가 채널을 여기로 돌린다
+ *   HW_UART_CH_BLE_DATA   원시 데이터  펌웨어 업데이트 등
+ */
+bool       bleIsReady(uint8_t uart_ch);
 
 #endif
 
