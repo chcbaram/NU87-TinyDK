@@ -62,6 +62,9 @@ bool hwInit(void)
 #ifdef _USE_HW_WIFI
   wifiInit();
 #endif
+#ifdef _USE_HW_BLE
+  bleInit();
+#endif
 
   logBoot(false);
 

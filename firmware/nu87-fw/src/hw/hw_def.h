@@ -87,6 +87,9 @@
 #define _HW_DEF_RTOS_THREAD_PRI_NET             2
 #define _HW_DEF_RTOS_THREAD_MEM_NET             (4*1024)
 
+#define _HW_DEF_RTOS_THREAD_PRI_BLE             3
+#define _HW_DEF_RTOS_THREAD_MEM_BLE             (4*1024)
+
 #endif
 
 

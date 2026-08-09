@@ -28,8 +28,12 @@ extern uint32_t SystemCoreClock;
 #define configMINIMAL_STACK_SIZE                    ( ( unsigned short ) 512 )
 #define configMAX_TASK_NAME_LEN                     ( 16 )
 
-/* heap_5 리전 크기. rtos.c 가 이 크기의 정적 배열을 등록한다. */
-#define configTOTAL_HEAP_SIZE                       ( ( size_t ) ( 128 * 1024 ) )
+/* heap_5 리전 크기. rtos.c 가 이 크기의 정적 배열을 등록한다.
+ *
+ * WiFi(lwIP 버퍼, skb)와 BLE(HCI 버퍼)가 이 하나를 나눠 쓴다. 128KB 로는
+ * 둘을 같이 켰을 때 BT 스택이 HCI 버퍼를 잡다가 실패한다
+ * ("[HCI I/F]Malloc failed"). BD_RAM_NS 가 476KB 이므로 여유가 있다. */
+#define configTOTAL_HEAP_SIZE                       ( ( size_t ) ( 256 * 1024 ) )
 
 #define configUSE_MUTEXES                           1
 #define configUSE_RECURSIVE_MUTEXES                 1

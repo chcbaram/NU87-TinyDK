@@ -16,6 +16,7 @@ extern "C" {
 #include "reset.h"
 #include "rtc.h"
 #include "wifi.h"
+#include "ble.h"
 #include "uart.h"
 #include "cli.h"
 #include "log.h"

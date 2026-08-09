@@ -71,6 +71,11 @@ MEMORY
    *
    * LENGTH 는 넘침 검출용 상한이다. 실제 한계는 OTA 슬롯 크기가 정한다. */
   KM4_IMG2 (rx)         : ORIGIN = 0x0E000000 + 0x20, LENGTH = 0x00200000 - 0x20
+
+  /* BT 스택의 트레이스 문자열이 가는 곳. 실제 메모리가 아니라 이미지 밖의
+   * 주소 공간이고, 호스트 도구가 로그를 해석할 때만 쓴다. 버리면 btgap.a 의
+   * .text 가 여기 심볼을 참조하는 채로 남아 링크가 깨진다. */
+  BTRACE (rx)           : ORIGIN = 0x00800000, LENGTH = 0x00C00000 - 0x00800000
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -261,7 +266,14 @@ SECTIONS
     __exidx_end = .;
   } > KM4_IMG2
 
-  /* PSRAM 과 BT trace 는 쓰지 않는다 */
+  .bluetooth_trace.text :
+  {
+    __btrace_start__ = .;
+    *(.BTTRACE)
+    __btrace_end__ = .;
+  } > BTRACE
+
+  /* PSRAM 은 이 칩에 없다 */
   /DISCARD/ :
   {
     *(.psram.text*)
@@ -269,7 +281,6 @@ SECTIONS
     *(.psram.rodata*)
     *(.psram.bss*)
     *(.psram.heap*)
-    *(.BTTRACE)
   }
 }
 

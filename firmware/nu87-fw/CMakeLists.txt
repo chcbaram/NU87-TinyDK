@@ -185,6 +185,8 @@ if(NU87_BLE)
     ${BT_DIR}/board/common/src/hci_process.c
     ${BT_DIR}/board/common/src/cycle_queue.c
     ${BT_DIR}/board/common/src/trace_task.c
+    # hci_uart.c 가 bt_uart_tx 를 참조한다. SDK 빌드 목록에도 있다.
+    ${BT_DIR}/board/common/src/bt_uart_bridge.c
 
     # rtl8721d_bt.c 는 넣지 않는다. 이미 lib_wlan.a 안에 있고
     # (bt_get_patch_code_8721d / Hal_BT_Is_Supported / rtlbt_fw)
@@ -200,6 +202,10 @@ if(NU87_BLE)
     ${BT_DIR}/board/amebad/src/hci/bt_normal_patch.c
     ${BT_DIR}/board/amebad/src/hci/bt_mp_patch.c
     ${BT_DIR}/board/amebad/src/vendor_cmd/vendor_cmd.c
+
+    # GATT 프로파일. 1단계는 연결 확인용이고 우리 서비스는 2단계에 추가한다.
+    ${BT_DIR}/src/ble/profile/server/simple_ble_service.c
+    ${BT_DIR}/src/ble/profile/server/bas.c
 
     # hci_board.c 가 ota_get_cur_index() 로 어느 슬롯에서 부팅했는지 물어
     # BT ROM 패치 주소를 고른다.
