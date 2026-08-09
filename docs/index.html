@@ -40,12 +40,21 @@
   }
   * { box-sizing: border-box; }
 
-  /* 화면을 꽉 채우고 콘솔을 바닥에 붙인다. 가운데만 스크롤한다. */
+  /* 화면 높이를 꽉 쓰되 좌우로는 퍼지지 않게 한다. 넓은 모니터에서 헤더가
+   * 끝에서 끝까지 늘어나면 내용이 허공에 뜬 것처럼 보인다. */
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
-    display: flex; flex-direction: column; height: 100dvh;
+    display: flex; justify-content: center; height: 100dvh;
+  }
+  .app {
+    width: 100%; max-width: 900px; height: 100%;
+    display: flex; flex-direction: column;
+    background: var(--bg);
+  }
+  @media (min-width: 900px) {
+    .app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
   }
 
   header {
@@ -79,8 +88,8 @@
   .badge { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
   .badge.on { background: var(--ok); }
 
-  main { flex: 1; overflow-y: auto; padding: 16px 14px; }
-  main > section { display: none; max-width: 720px; margin: 0 auto; }
+  main { flex: 1; overflow-y: auto; padding: 16px; }
+  main > section { display: none; }
   main > section.on { display: block; }
 
   #msg { min-height: 22px; font-size: 13px; margin-bottom: 12px; }
@@ -139,6 +148,7 @@
 </style>
 </head>
 <body>
+<div class="app">
 
 <header>
   <span class="dot" id="dot"></span>
@@ -216,6 +226,8 @@
     <button id="btnSend" disabled>보내기</button>
   </div>
 </footer>
+
+</div>
 
 <script>
 /* 펌웨어 hw/driver/ble_svc.c 의 정의와 같아야 한다. */
