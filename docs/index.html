@@ -78,10 +78,12 @@
   button[hidden] { display: none; }
 
   /* 바를 하나 더 쌓지 않고 내용 위에 세그먼트로 둔다. */
-  .tabs { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 18px;
-          background: var(--line); border-radius: 9px; }
+  .tabs { display: inline-flex; gap: 2px; padding: 2px; margin-bottom: 16px;
+          background: var(--line); border-radius: 8px; }
   .tabs button {
-    border: none; background: none; border-radius: 7px; padding: 6px 16px;
+    border: none; background: none; border-radius: 6px;
+    /* font:inherit 는 line-height 1.6 까지 물려받아 알약이 필요 이상으로 커진다 */
+    font-size: 14px; line-height: 1.4; padding: 5px 14px;
     color: var(--dim); display: flex; align-items: center; gap: 6px;
   }
   .tabs button.on { background: var(--panel); color: var(--text); font-weight: 600; }
