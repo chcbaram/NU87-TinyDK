@@ -122,18 +122,6 @@
   #msg.err { color: var(--err); }
   #msg.ok  { color: var(--ok); }
 
-  /* 최대 24개까지 나온다. 다 펼치면 아래 폼이 밀린다. */
-  .aplist { list-style: none; margin: 0; padding: 0; background: var(--bg);
-            border: 1px solid var(--line); border-radius: 8px;
-            max-height: 190px; overflow-y: auto; }
-  .aplist li { display: flex; align-items: center; gap: 10px; padding: 7px 12px;
-               cursor: pointer; border-top: 1px solid var(--line); }
-  .aplist li:first-child { border-top: none; }
-  .aplist li:hover { background: var(--line); }
-  .aplist .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-                  white-space: nowrap; }
-  .aplist .meta { color: var(--dim); font-size: 12px; font-family: var(--mono); flex: none; }
-
   form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
   label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
   input, select {
@@ -214,9 +202,9 @@
       <h2>주변 검색</h2>
       <div class="row">
         <button id="btnScan" disabled>검색</button>
+        <select id="apSelect" style="flex:1;min-width:200px" hidden></select>
         <span class="note" style="margin:0" id="scanNote"></span>
       </div>
-      <ul class="aplist" id="aplist" hidden></ul>
     </div>
 
     <div class="card">
@@ -579,26 +567,22 @@ function parseScan(text) {
 }
 
 function renderScan(list) {
-  const ul = $('aplist');
-  ul.innerHTML = '';
-  ul.hidden = list.length === 0;
+  const sel = $('apSelect');
+
+  sel.innerHTML = '';
+  sel.hidden = list.length === 0;
+  if (!list.length) return;
+
+  const head = document.createElement('option');
+  head.value = '';
+  head.textContent = '고를 것';
+  sel.append(head);
 
   for (const ap of list) {
-    const li = document.createElement('li');
-    const name = document.createElement('span');
-    const meta = document.createElement('span');
-
-    name.className = 'name';
-    name.textContent = ap.ssid;
-    meta.className = 'meta';
-    meta.textContent = ap.rssi + ' dBm  ch' + ap.chan + '  ' + ap.sec;
-
-    li.append(name, meta);
-    li.addEventListener('click', () => {
-      $('ssid').value = ap.ssid;
-      $('pass').focus();
-    });
-    ul.append(li);
+    const o = document.createElement('option');
+    o.value = ap.ssid;
+    o.textContent = `${ap.ssid} · ${ap.rssi} dBm · ch${ap.chan} · ${ap.sec}`;
+    sel.append(o);
   }
 }
 
@@ -889,6 +873,13 @@ $('btnUsb').addEventListener('click', () => connect(openUsb, 'USB'));
 $('btnDisconnect').addEventListener('click', disconnect);
 $('btnRefresh').addEventListener('click', refresh);
 $('btnScan').addEventListener('click', scan);
+
+$('apSelect').addEventListener('change', () => {
+  if (!$('apSelect').value) return;
+
+  $('ssid').value = $('apSelect').value;
+  $('pass').focus();
+});
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
 
 $('fwSelect').addEventListener('change', async () => {
