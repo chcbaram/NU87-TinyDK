@@ -124,6 +124,11 @@
 
   form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
   label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  /* 라디오는 폭을 늘리지 않는다. 아래 input 규칙이 width:100% 를 준다. */
+  label.pick { display: flex; align-items: center; gap: 6px; margin: 0;
+               font-size: 14px; color: var(--text); cursor: pointer; }
+  label.pick input { width: auto; margin: 0; }
+
   input, select {
     font: inherit; font-size: 14px; width: 100%; padding: 7px 10px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--bg); color: var(--text);
@@ -235,16 +240,20 @@
     </div>
 
     <div class="card">
-      <h2>배포본</h2>
+      <h2>이미지</h2>
       <div class="row">
+        <label class="pick"><input type="radio" name="fwsrc" id="srcRel" checked> 배포본</label>
+        <label class="pick"><input type="radio" name="fwsrc" id="srcLocal"> 직접 고르기</label>
+      </div>
+
+      <div class="row" id="rowRel">
         <button id="btnFwReload">검색</button>
         <select id="fwSelect" style="flex:1;min-width:200px">
           <option value="">불러오는 중…</option>
         </select>
       </div>
 
-      <h2 style="margin-top:22px">직접 고르기</h2>
-      <div class="row">
+      <div class="row" id="rowLocal" hidden>
         <input type="file" id="fwFile" accept=".bin" style="flex:1;min-width:200px">
       </div>
 
@@ -794,9 +803,33 @@ async function loadReleases() {
     /* 새 것이 위로 온다. 첫 항목을 골라 두되 내려받지는 않는다 —
      * 페이지를 열 때마다 수백 KB 를 받을 이유가 없다. 보낼 때 받는다. */
     sel.selectedIndex = 0;
-    pickRelease(list[0]);
+    if ($('srcRel').checked) pickRelease(list[0]);
   } catch (e) {
     only('배포본 목록을 읽지 못했다');
+  }
+}
+
+/* 출처는 하나만 고른다.
+ *
+ * 전에는 배포본을 고른 뒤 파일을 지정해도 선택창에 배포본이 그대로 보여서
+ * 무엇이 나갈지 알 수 없었다. 라디오로 갈라 한쪽만 보이게 한다. */
+function setSource(kind) {
+  $('rowRel').hidden   = kind !== 'rel';
+  $('rowLocal').hidden = kind === 'rel';
+
+  pending = null;
+  selected = null;
+  $('fwBar').style.width = '0';
+  $('fwNote').style.color = '';
+  $('btnFlash').disabled = true;
+
+  if (kind === 'rel') {
+    const it = releases.find((r) => r.file === $('fwSelect').value);
+    if (it) pickRelease(it);
+    else    $('fwNote').textContent = '배포본을 고를 것.';
+  } else {
+    $('fwFile').value = '';
+    $('fwNote').textContent = 'km0_km4_image2.bin 을 고를 것.';
   }
 }
 
@@ -805,7 +838,6 @@ function pickRelease(it) {
   selected = it;
   pending = null;
 
-  $('fwFile').value = '';
   $('fwBar').style.width = '0';
   $('fwNote').style.color = '';
   $('fwNote').textContent =
@@ -921,9 +953,11 @@ $('fwFile').addEventListener('change', async () => {
   const file = $('fwFile').files[0];
   if (!file) return;
 
-  selected = null;                  /* 배포본 선택과 섞이지 않게 */
   setPending(file.name, new Uint8Array(await file.arrayBuffer()));
 });
+
+$('srcRel').addEventListener('change', () => setSource('rel'));
+$('srcLocal').addEventListener('change', () => setSource('local'));
 
 $('btnReboot').addEventListener('click', async () => {
   const via = transport ? transport.name : '';
