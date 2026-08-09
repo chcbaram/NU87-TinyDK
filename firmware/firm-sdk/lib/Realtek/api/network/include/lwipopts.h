@@ -176,6 +176,10 @@ a lot of data that needs to be copied, this should be set high. */
 #define SO_REUSE                        1
 
 /* Support Multicast */
+/* mDNS 가 광고할 이름의 출처다. 꺼 두면 xnetif[0].hostname 이 없어서
+ * mDNSPlatformHostname() 이 "ameba" 를 돌려준다. */
+#define LWIP_NETIF_HOSTNAME         1
+
 #define LWIP_IGMP                   1
 #define LWIP_RAND()                 rand()
 extern unsigned int sys_now(void);

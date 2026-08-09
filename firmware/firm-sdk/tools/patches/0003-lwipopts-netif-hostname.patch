@@ -1,0 +1,26 @@
+Ameba-D SDK: lwipopts 에 LWIP_NETIF_HOSTNAME 켜기
+
+문제
+----
+mDNS 가 광고할 이름은 mDNSPlatform.c 의 mDNSPlatformHostname() 이 정하고,
+그 함수는 xnetif[0].hostname 을 돌려준다. 이 필드는 LWIP_NETIF_HOSTNAME 이
+켜져 있을 때만 존재한다. lwIP 기본값이 0 이라 꺼져 있고, 그러면
+mDNSPlatformHostname() 이 "ameba" 를 반환해 ameba.local 로 광고된다.
+
+해결
+----
+LWIP_NETIF_HOSTNAME 을 켠다. 그러면 응용이 netif_set_hostname() 으로 이름을
+정할 수 있어 nu87-tinydk.local 이 된다. 덤으로 DHCP 요청에 호스트명이 실려
+공유기 단말 목록에도 보드 이름이 그대로 뜬다.
+
+--- a/api/network/include/lwipopts.h
++++ b/api/network/include/lwipopts.h
+@@ -176,6 +176,10 @@
+ #define SO_REUSE                        1
+ 
+ /* Support Multicast */
++/* mDNS 가 광고할 이름의 출처다. 꺼 두면 xnetif[0].hostname 이 없어서
++ * mDNSPlatformHostname() 이 "ameba" 를 돌려준다. */
++#define LWIP_NETIF_HOSTNAME         1
++
+ #define LWIP_IGMP                   1

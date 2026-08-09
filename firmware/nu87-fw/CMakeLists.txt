@@ -124,6 +124,9 @@ if(NU87_WIFI)
     ${SRC_LWIP}
     ${REALTEK_DIR}/network/dhcp/dhcps.c
 
+    # mDNS(Bonjour). 구현은 lib_mdns.a 에 있고 이 파일은 lwIP 접착부 4 함수다.
+    ${REALTEK_DIR}/network/mDNS/mDNSPlatform.c
+
     ${WIFIAPI_DIR}/lwip_netconf.c
     ${WIFIAPI_DIR}/wifi/wifi_util.c
     ${WIFIAPI_DIR}/wifi/wifi_conf.c
@@ -288,6 +291,7 @@ if(NU87_WIFI)
     ${REALTEK_DIR}/lib/application/lib_wps.a
     ${REALTEK_DIR}/lib/application/lib_pmc_hp.a
     ${REALTEK_DIR}/lib/application/lib_eap.a
+    ${REALTEK_DIR}/lib/application/lib_mdns.a
     -Wl,--end-group
   )
 endif()

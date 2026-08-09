@@ -21,6 +21,8 @@
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "lwip/inet.h"
+#include "lwip/netif.h"
+#include "mDNS/mDNS.h"
 
 
 #define NET_NVS_NAME          "net_cfg"
@@ -42,6 +44,11 @@
 #define NET_DISCOVER_PORT     50000
 #define NET_DISCOVER_REQ      "NU87?"
 
+/* mDNS. 이 이름이 nu87-tinydk.local 이 되고 DHCP 요청에도 실린다. */
+#define NET_MDNS_HOSTNAME     "nu87-tinydk"
+#define NET_MDNS_SERVICE      "_telnet._tcp"
+#define NET_MDNS_PORT         23
+
 
 typedef struct
 {
@@ -55,6 +62,7 @@ static bool       is_init  = false;
 static NetState_t state    = NET_STATE_IDLE;
 static uint32_t   sync_time = 0;
 static int        discover_sock = -1;
+static bool       is_mdns_up    = false;
 static net_cfg_t  net_cfg =
 {
   .ssid    = "",
@@ -67,6 +75,7 @@ static bool netCfgLoad(void);
 static bool netCfgSave(void);
 static bool netSntpQuery(const char *server, uint32_t *p_epoch);
 static void netDiscoverPoll(void);
+static bool netMdnsStart(void);
 
 #ifdef _USE_HW_CLI
 static void cliNet(cli_args_t *args);
@@ -182,6 +191,7 @@ static void netThread(void *arg)
                     net_cfg.ssid, ip[0], ip[1], ip[2], ip[3]);
           state = NET_STATE_ONLINE;
           sync_time = 0;
+          netMdnsStart();
         }
         else
         {
@@ -272,6 +282,39 @@ static bool netSntpQuery(const char *server, uint32_t *p_epoch)
   return ret;
 }
 
+
+/* mDNS 광고. 이름만으로 붙을 수 있게 한다 — nu87-tinydk.local
+ *
+ * 광고할 이름은 lib_mdns.a 가 mDNSPlatformHostname() 으로 가져가고 그 함수는
+ * xnetif[0].hostname 을 돌려준다. 그래서 여기서 먼저 이름을 박아야 한다.
+ * 이 이름은 DHCP 요청에도 실려 공유기 단말 목록에 그대로 뜬다. */
+static bool netMdnsStart(void)
+{
+  static TXTRecordRef  txt;
+  static unsigned char txt_buf[64];
+
+  if (is_mdns_up || netif_default == NULL) return false;
+
+  netif_set_hostname(netif_default, NET_MDNS_HOSTNAME);
+
+  if (mDNSResponderInit() != 0)
+  {
+    logPrintf("[E_] net : mDNS 시작 실패\n");
+    return false;
+  }
+
+  TXTRecordCreate(&txt, sizeof(txt_buf), txt_buf);
+  TXTRecordSetValue(&txt, "board", strlen(_DEF_BOARD_NAME), _DEF_BOARD_NAME);
+  TXTRecordSetValue(&txt, "ver", strlen(_DEF_FIRMWATRE_VERSION), _DEF_FIRMWATRE_VERSION);
+
+  mDNSRegisterService(NET_MDNS_HOSTNAME, NET_MDNS_SERVICE, "local",
+                      NET_MDNS_PORT, &txt);
+  TXTRecordDeallocate(&txt);
+
+  is_mdns_up = true;
+  logPrintf("[OK] net : mDNS  %s.local\n", NET_MDNS_HOSTNAME);
+  return true;
+}
 
 /* PC 가 브로드캐스트로 "NU87?" 를 던지면 자기소개로 답한다.
  * DHCP 로 IP 가 매번 바뀌어도 보드를 찾을 수 있게 하는 것이 목적이라

@@ -162,6 +162,12 @@ project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/l
 project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_pmc_hp.a -> lib/application/lib_pmc_hp.a
 # WPA/EAP
 project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_eap.a    -> lib/application/lib_eap.a
+# mDNS(Bonjour). 이름으로 보드를 찾게 한다: nu87-tinydk.local
+# 외부 의존이 43 개뿐이고 전부 lwIP / FreeRTOS / swlib 이라 값이 싸다.
+# 나머지 4 개(mDNSPlatform*)는 아래 shim 이 채운다.
+project/realtek_amebaD_va0_example/GCC-RELEASE/project_hp/asdk/lib/application/lib_mdns.a   -> lib/application/lib_mdns.a
+component/common/network/mDNS/mDNS.h                             -> network/mDNS/mDNS.h
+component/common/network/mDNS/mDNSPlatform.c                     -> network/mDNS/mDNSPlatform.c
 
 # OS 추상화. lib_wlan.a 가 요구하는 심볼의 절반이 여기서 나온다
 # (ATOMIC_*, rtw_*, device_mutex_*, save_flags/restore_flags 등).
