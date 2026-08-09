@@ -237,6 +237,7 @@
     <div class="card">
       <h2>배포본</h2>
       <div class="row">
+        <button id="btnFwReload">갱신</button>
         <select id="fwSelect" style="flex:1;min-width:200px">
           <option value="">불러오는 중…</option>
         </select>
@@ -953,6 +954,8 @@ $('btnStop').addEventListener('click', () => {
   $('btnStop').disabled = true;
   setTimeout(() => { $('btnStop').disabled = false; }, 1000);
 });
+
+$('btnFwReload').addEventListener('click', loadReleases);
 
 $('btnFlash').addEventListener('click', async () => {
   try {
