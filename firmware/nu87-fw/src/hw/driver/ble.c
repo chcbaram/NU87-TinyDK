@@ -28,7 +28,6 @@
 #include <gap_le.h>
 #include <gap_msg.h>
 #include <profile_server.h>
-#include <simple_ble_service.h>
 #include <bas.h>
 #include <bte.h>
 #include <os_msg.h>
@@ -37,6 +36,8 @@
 #include <app_msg.h>
 
 #include "osal/thread.h"
+
+#include "ble_svc.h"
 
 #include "ftl_int.h"
 #include "rtk_coex.h"
@@ -63,7 +64,7 @@ static uint8_t    conn_id  = 0xFF;
 static void *io_queue = NULL;
 static void *evt_queue = NULL;
 
-static T_SERVER_ID simp_srv_id;
+static T_SERVER_ID nu87_srv_id;
 static T_SERVER_ID bas_srv_id;
 
 /* 광고 패킷. 이름은 스캔 응답이 아니라 광고에 실어야 스캐너 목록에 바로 뜬다.
@@ -76,6 +77,8 @@ static uint8_t adv_data[31] =
 
 static uint8_t adv_data_len = 3;
 
+
+static ble_rx_cb  rx_handler = NULL;
 
 static void bleThread(void *arg);
 static void bleStackStart(void);
@@ -146,6 +149,32 @@ bool bleGetMac(char *p_str, uint32_t length)
   snprintf(p_str, length, "%02X:%02X:%02X:%02X:%02X:%02X",
            addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
   return true;
+}
+
+bool bleSetRxHandler(ble_rx_cb handler)
+{
+  rx_handler = handler;
+  return true;
+}
+
+/* 호스트가 CCCD 를 켜야 보낼 수 있다. 연결만으로는 부족하다. */
+bool bleIsReady(void)
+{
+  return (bleIsConnected() && bleSvcIsNotifyEnabled());
+}
+
+bool bleSend(uint8_t *p_data, uint16_t length)
+{
+  if (bleIsReady() == false) return false;
+
+  return bleSvcSend(conn_id, p_data, length);
+}
+
+static void bleSvcRx(uint8_t id, uint8_t *p_data, uint16_t length)
+{
+  (void)id;
+
+  if (rx_handler != NULL) rx_handler(p_data, length);
 }
 
 static void bleThread(void *arg)
@@ -252,8 +281,16 @@ static void bleProfileInit(void)
 {
   server_init(2);
 
-  simp_srv_id = simp_ble_service_add_service((void *)bleProfileCallback);
+  nu87_srv_id = bleSvcAddService((void *)bleProfileCallback);
+  bleSvcSetRxHandler(bleSvcRx);
   bas_srv_id  = bas_add_service((void *)bleProfileCallback);
+
+  /* server_init() 에 알린 개수만큼 등록되지 않으면 GATT 서버가 데이터베이스를
+   * 완성하지 못한다. 그러면 연결은 되는데 ATT 응답이 없어 supervision timeout
+   * 으로 끊긴다. 조용히 넘기면 원인을 찾기 어렵다. */
+  logPrintf("[%s] ble : 서비스 등록  nu87=%d bas=%d\n",
+            (nu87_srv_id != 0xFF && bas_srv_id != 0xFF) ? "OK" : "E_",
+            nu87_srv_id, bas_srv_id);
 
   server_register_app_cb(bleProfileCallback);
 }

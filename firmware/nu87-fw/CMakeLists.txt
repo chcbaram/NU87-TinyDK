@@ -204,7 +204,6 @@ if(NU87_BLE)
     ${BT_DIR}/board/amebad/src/vendor_cmd/vendor_cmd.c
 
     # GATT 프로파일. 1단계는 연결 확인용이고 우리 서비스는 2단계에 추가한다.
-    ${BT_DIR}/src/ble/profile/server/simple_ble_service.c
     ${BT_DIR}/src/ble/profile/server/bas.c
 
     # hci_board.c 가 ota_get_cur_index() 로 어느 슬롯에서 부팅했는지 물어

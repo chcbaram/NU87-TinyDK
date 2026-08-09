@@ -9,5 +9,6 @@
 #include "module.h"
 #include "cli/cli_mgr.h"
 #include "network/net/net.h"
+#include "network/ble/ble_cfg.h"
 
 #endif
