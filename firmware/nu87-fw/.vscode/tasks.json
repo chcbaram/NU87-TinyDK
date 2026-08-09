@@ -9,13 +9,36 @@
   "version": "2.0.0",
   "tasks": [
     // ── 빌드 ────────────────────────────────────────────────────────────
+    // configure 는 한 번만 하면 되고 이후 build 가 그 설정을 그대로 쓴다.
+    // 구성을 바꾸려면 아래 configure 를 다시 돌린다.
     {
-      "label": "build-configure",
+      "label": "build-configure · 기본",
       "type": "shell",
+      "detail": "무선 없음. LED / CLI / RTC / NVS 만",
       "windows": {
         "command": "cmake -S . -B build -G 'MinGW Makefiles'"
       },
       "command": "cmake -S . -B build",
+      "problemMatcher": []
+    },
+    {
+      "label": "build-configure · WiFi",
+      "type": "shell",
+      "detail": "WiFi + lwIP + 텔넷 CLI + mDNS",
+      "windows": {
+        "command": "cmake -S . -B build -G 'MinGW Makefiles' -DNU87_WIFI=ON"
+      },
+      "command": "cmake -S . -B build -DNU87_WIFI=ON",
+      "problemMatcher": []
+    },
+    {
+      "label": "build-configure · WiFi+BLE",
+      "type": "shell",
+      "detail": "★ 웹페이지로 붙으려면 이 구성이어야 한다. BLE 는 WiFi 를 요구한다",
+      "windows": {
+        "command": "cmake -S . -B build -G 'MinGW Makefiles' -DNU87_WIFI=ON -DNU87_BLE=ON"
+      },
+      "command": "cmake -S . -B build -DNU87_WIFI=ON -DNU87_BLE=ON",
       "problemMatcher": []
     },
     {
@@ -105,6 +128,32 @@
       "problemMatcher": []
     },
 
+    // ── 업데이트 (실행 중인 펌웨어에 밀어넣기) ──────────────────────────
+    // flash.py 와 다르다. 다운로드 모드로 진입시키지 않고, 돌고 있는 펌웨어의
+    // CLI 로 반대편 OTA 슬롯에 쓴다. 실패해도 지금 슬롯이 남아 보드가 죽지 않는다.
+    {
+      "label": "ota-update",
+      "type": "shell",
+      "detail": "반대편 슬롯에 밀어넣는다 · 포트 선택",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/ota.py --port ${input:port} --image build/km0_km4_image2.bin"
+      },
+      "command": "python3 ../firm-sdk/tools/ota.py --port ${input:port} --image build/km0_km4_image2.bin",
+      "problemMatcher": []
+    },
+    {
+      "label": "ota-update · 재부팅까지",
+      "type": "shell",
+      "detail": "밀어넣고 바로 재부팅해 새 슬롯으로 뜨게 한다",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/ota.py --port ${input:port} --image build/km0_km4_image2.bin --reset"
+      },
+      "command": "python3 ../firm-sdk/tools/ota.py --port ${input:port} --image build/km0_km4_image2.bin --reset",
+      "problemMatcher": []
+    },
+
     // ── 콘솔 ────────────────────────────────────────────────────────────
     {
       "label": "console - monitor",
@@ -131,6 +180,32 @@
       "presentation": {
         "panel": "dedicated",
         "focus": true
+      }
+    },
+    {
+      "label": "console - telnet",
+      "type": "shell",
+      "detail": "WiFi 로 붙은 보드의 CLI. mDNS 이름으로 찾는다",
+      "command": "telnet nu87-tinydk.local",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "console - discover",
+      "type": "shell",
+      "detail": "같은 네트워크의 보드를 이름 · 버전 · IP 와 함께 찾는다",
+      "windows": {
+        "command": "python ../firm-sdk/tools/discover.py"
+      },
+      "command": "python3 ../firm-sdk/tools/discover.py",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "clear": true
       }
     },
     {
@@ -182,6 +257,20 @@
       "detail": "섹션별 크기와 SRAM 사용량",
       "command": "arm-none-eabi-size -A build/nu87-fw.elf",
       "problemMatcher": []
+    },
+    {
+      "label": "util - pages",
+      "type": "shell",
+      "detail": "설정 페이지를 localhost:8000 으로 띄운다 (localhost 도 보안 컨텍스트라 Web Bluetooth 가 동작한다)",
+      "windows": {
+        "command": "python -m http.server 8000 --bind 127.0.0.1 --directory ../../docs"
+      },
+      "command": "python3 -m http.server 8000 --bind 127.0.0.1 --directory ../../docs",
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated"
+      }
     },
     {
       "label": "util - sdk-sync",
