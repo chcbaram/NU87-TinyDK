@@ -14,6 +14,7 @@
 #define _USE_HW_ASSERT
 #define _USE_HW_RESET
 #define _USE_HW_RTC
+#define _USE_HW_OTA
 #define _USE_HW_NVS
 /* 4MB 플래시의 마지막 8KB. 앞쪽이 커져도(OTA 슬롯 확장, 파일시스템 추가) 부딪히지 않는다. */
 #define      HW_NVS_FLASH_OFFSET    0x003FE000

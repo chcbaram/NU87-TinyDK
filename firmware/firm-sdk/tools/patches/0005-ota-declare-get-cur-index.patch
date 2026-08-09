@@ -1,0 +1,32 @@
+Ameba-D SDK: ota_get_cur_index() 선언 추가
+
+문제
+----
+misc/rtl8721d_ota.c 가 ota_get_cur_index() 를 구현하지만 어느 헤더에도
+선언이 없다. 그래서 부르는 쪽마다 암시적 선언이 되고, 벤더 완화 플래그를
+쓰지 않는 우리 코드에서는 오류가 된다.
+
+    src/hw/driver/ota.c:65:23: error: implicit declaration of
+        function 'ota_get_cur_index'
+
+벤더 코드인 hci_board.c 도 같은 이유로 경고가 난다 (BT ROM 패치 주소를
+고르려고 이 함수를 부른다).
+
+해결
+----
+fwlib/include/rtl8721d_ota.h 에 선언을 넣는다. 같은 파일의 다른 ota_*
+함수들이 이미 선언되어 있는 자리다.
+
+--- a/fwlib/include/rtl8721d_ota.h
++++ b/fwlib/include/rtl8721d_ota.h
+@@ -158,6 +158,10 @@
+ #if (SERVER_TYPE == SERVER_LOCAL)
+ void ota_platform_reset(void);
+ int ota_write_ota2_addr(uint32_t ota_addr);
++/* 어느 OTA 슬롯에서 부팅했는지 Flash MMU 로 판별한다. misc/rtl8721d_ota.c 에
++ * 구현되어 있는데 선언이 어디에도 없어 부르는 쪽마다 암시적 선언이 된다.
++ * hci_board.c 도 이것 때문에 경고가 난다. */
++u32 ota_get_cur_index(void);
+ int ota_readstream_user(u32 address, u32 len, u8 * data);
+ int ota_writestream_user(u32 address, u32 len, const u8 * data);
+ 

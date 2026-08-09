@@ -54,6 +54,7 @@ file(GLOB SRC_FILES_VENDOR CONFIGURE_DEPENDS
   ${REALTEK_DIR}/fwlib/usrcfg/*.c
 )
 
+
 # ── FreeRTOS 사용 여부 ──────────────────────────────────────────────────────
 #   ON  (기본) 커널을 링크하고 _USE_HW_RTOS 를 정의한다.
 #              main() 이 mainThread 를 만들어 그 안에서 hwInit/apInit/apMain 을 돈다.
@@ -203,12 +204,13 @@ if(NU87_BLE)
     ${BT_DIR}/board/amebad/src/hci/bt_mp_patch.c
     ${BT_DIR}/board/amebad/src/vendor_cmd/vendor_cmd.c
 
+    # hci_board.c 가 ota_get_cur_index() 로 BT ROM 패치 주소를 고른다.
+    # 이 파일은 lwIP 를 요구하므로 WiFi 가 있는 BLE 구성에서만 넣을 수 있다.
+    # hw/driver/ota.c 는 이것에 기대지 않고 MMU 를 직접 읽는다.
+    ${REALTEK_DIR}/misc/rtl8721d_ota.c
+
     # GATT 프로파일. 1단계는 연결 확인용이고 우리 서비스는 2단계에 추가한다.
     ${BT_DIR}/src/ble/profile/server/bas.c
-
-    # hci_board.c 가 ota_get_cur_index() 로 어느 슬롯에서 부팅했는지 물어
-    # BT ROM 패치 주소를 고른다.
-    ${REALTEK_DIR}/misc/rtl8721d_ota.c
 
     # 본딩키 저장. 플래시 끝단 예약 영역을 쓴다 (docs/06 §6.4.1)
     ${REALTEK_DIR}/file_system/ftl/ftl.c

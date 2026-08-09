@@ -158,6 +158,10 @@ void ota_update_free(void *buf);
 #if (SERVER_TYPE == SERVER_LOCAL)
 void ota_platform_reset(void);
 int ota_write_ota2_addr(uint32_t ota_addr);
+/* 어느 OTA 슬롯에서 부팅했는지 Flash MMU 로 판별한다. misc/rtl8721d_ota.c 에
+ * 구현되어 있는데 선언이 어디에도 없어 부르는 쪽마다 암시적 선언이 된다.
+ * hci_board.c 도 이것 때문에 경고가 난다. */
+u32 ota_get_cur_index(void);
 int ota_readstream_user(u32 address, u32 len, u8 * data);
 int ota_writestream_user(u32 address, u32 len, const u8 * data);
 

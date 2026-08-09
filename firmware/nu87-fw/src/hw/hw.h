@@ -14,6 +14,7 @@ extern "C" {
 #include "ipc.h"
 #include "nvs.h"
 #include "reset.h"
+#include "ota.h"
 #include "rtc.h"
 #include "wifi.h"
 #include "ble.h"

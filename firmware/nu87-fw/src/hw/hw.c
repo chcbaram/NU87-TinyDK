@@ -59,6 +59,7 @@ bool hwInit(void)
   /* nvs 는 플래시를 쓴다. FLASH_Write_Lock() 이 IPC 로 KM0 를 재우고 응답을
    * 기다리므로 ipcInit() 보다 뒤여야 한다. */
   nvsInit();
+  otaInit();
 #ifdef _USE_HW_WIFI
   wifiInit();
 #endif
