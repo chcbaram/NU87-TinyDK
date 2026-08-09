@@ -22,7 +22,7 @@
 #define NVS_MAGIC           0x4E56534DUL      /* "NVSM" */
 #define NVS_SLOT_MAX        16
 #define NVS_NAME_MAX        16
-#define NVS_DATA_MAX        96
+#define NVS_DATA_MAX        128
 
 #define NVS_SECTOR_SIZE     4096
 #define NVS_SECTOR_A        HW_NVS_FLASH_OFFSET
@@ -190,25 +190,31 @@ static bool nvsReadSector(uint32_t addr, nvs_table_t *p_table)
   return true;
 }
 
+/* 테이블은 2KB 가 넘는다. 두 섹터를 스택에 올려놓고 비교하면 스레드 스택을
+ * 넘기므로, 하나씩 static 테이블로 읽어들이고 순번만 기억한다. */
 static bool nvsLoad(void)
 {
-  nvs_table_t a;
-  nvs_table_t b;
-  bool ok_a = nvsReadSector(NVS_SECTOR_A, &a);
-  bool ok_b = nvsReadSector(NVS_SECTOR_B, &b);
+  uint32_t seq_a = 0;
+  bool     ok_a  = nvsReadSector(NVS_SECTOR_A, &nvs_table);
 
-  if (ok_a && (!ok_b || a.seq >= b.seq))
+  if (ok_a) seq_a = nvs_table.seq;
+
+  if (nvsReadSector(NVS_SECTOR_B, &nvs_table))
   {
-    nvs_table = a;
-    cur_addr  = NVS_SECTOR_A;
+    if (ok_a == false || nvs_table.seq >= seq_a)
+    {
+      cur_addr = NVS_SECTOR_B;
+      return true;
+    }
+  }
+
+  if (ok_a)
+  {
+    nvsReadSector(NVS_SECTOR_A, &nvs_table);
+    cur_addr = NVS_SECTOR_A;
     return true;
   }
-  if (ok_b)
-  {
-    nvs_table = b;
-    cur_addr  = NVS_SECTOR_B;
-    return true;
-  }
+
   return false;
 }
 
@@ -218,7 +224,6 @@ static bool nvsSave(void)
   const uint8_t *p = (const uint8_t *)&nvs_table;
   uint32_t left = sizeof(nvs_table_t);
   uint32_t off  = 0;
-  nvs_table_t verify;
 
   nvs_table.seq++;
   nvs_table.crc = nvsCalcCrc(&nvs_table);
@@ -235,9 +240,15 @@ static bool nvsSave(void)
     left -= len;
   }
 
-  if (nvsReadSector(addr, &verify) == false)
+  /* 버퍼를 또 잡지 않고 플래시와 메모리를 바로 대조한다. */
   {
-    return false;
+    const volatile uint32_t *p_flash = (const volatile uint32_t *)(SPI_FLASH_BASE + addr);
+    const uint32_t          *p_ram   = (const uint32_t *)&nvs_table;
+
+    for (uint32_t i = 0; i < sizeof(nvs_table_t) / 4; i++)
+    {
+      if (p_flash[i] != p_ram[i]) return false;
+    }
   }
 
   cur_addr = addr;

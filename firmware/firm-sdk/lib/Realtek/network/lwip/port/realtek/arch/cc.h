@@ -100,13 +100,15 @@ typedef int sys_prot_t;
 
 #define LWIP_NO_STDINT_H 1
 
-/* 벤더 asdk newlib 은 struct timeval 과 in_addr_t 를 제공하지만 표준
- * arm-none-eabi newlib 에는 in_addr_t 가 없다. 이 저장소는 표준 툴체인으로
- * 빌드하므로 lwIP 가 자기 정의를 쓰게 둔다.
- * asdk 로 빌드할 때만 CONFIG_ASDK_NEWLIB 를 정의한다. */
-#if defined(CONFIG_ASDK_NEWLIB) && \
-    (defined (CONFIG_PLATFORM_8710C)||defined(CONFIG_PLATFORM_8721D)) && \
-    defined (__GNUC__) && (__GNUC__ >= 6)
+/* struct timeval 과 in_addr_t 는 newlib 것을 쓴다.
+ *
+ * 여기서 직접 include 하는 것이 핵심이다. 이 두 헤더를 다른 곳에서 먼저
+ * 들여왔는지에 따라 lwIP 가 정의를 만들기도 하고 안 만들기도 해서, 그대로
+ * 두면 include 순서에 따라 'unknown type' 과 'redefinition' 이 번갈아 난다. */
+#include <sys/types.h>
+#include <sys/time.h>
+
+#if (defined (CONFIG_PLATFORM_8710C)||defined(CONFIG_PLATFORM_8721D)) && defined (__GNUC__) && (__GNUC__ >= 6)
 #define LWIP_TIMEVAL_PRIVATE 0
 #define IN_ADDR_T_DEFINED 1
 #endif
