@@ -663,6 +663,56 @@ function makeLineReader() {
   };
 }
 
+/* 고른 파일이 어떤 이미지인지 읽는다. 보내기 전에 알아야 할 것이 둘이다.
+ *
+ *   이름과 버전   헤더 체인을 걸어가 ram 파트를 찾고 그 +32 의 firm_ver_t 를
+ *                 읽는다. 링커스크립트가 거기 고정해 둔다.
+ *   무선 지원     로그 문자열이 rodata 에 그대로 남아 있어 그것으로 가른다.
+ *                 표식을 따로 심는 것보다 낫다 — 지금까지 만든 이미지에도
+ *                 이미 들어 있어 펌웨어를 고칠 필요가 없다.
+ */
+const IMG_SIG = '81958711';
+
+function readImage(bytes) {
+  const dv = new DataView(bytes.buffer);
+  const info = { parts: [], wifi: false, ble: false, name: '', ver: '' };
+  const sig = (o) => String.fromCharCode.apply(null, bytes.slice(o, o + 8));
+
+  let off = 0;
+  while (off + 32 <= bytes.length) {
+    if (sig(off) !== IMG_SIG) {
+      /* KM0 이미지는 4KB 로 패딩된다. 경계까지 건너뛰고 다시 본다. */
+      const next = ((off >> 12) + 1) << 12;
+      if (next <= off || next + 32 > bytes.length) break;
+      off = next;
+      continue;
+    }
+    const len  = dv.getUint32(off + 8, true);
+    const addr = dv.getUint32(off + 12, true);
+    info.parts.push({ start: off + 32, len, addr });
+    off += 32 + len;
+  }
+
+  const ram = info.parts.find((p) => p.addr === 0x10005000);
+  if (ram) {
+    const v = bytes.slice(ram.start + 32, ram.start + 32 + 68);
+    const str = (a, b) => {
+      let t = v.slice(a, b);
+      const end = t.indexOf(0);
+      if (end >= 0) t = t.slice(0, end);
+      return String.fromCharCode.apply(null, t);
+    };
+    info.ver  = str(4, 36);
+    info.name = str(36, 68);
+  }
+
+  const text = new TextDecoder('latin1').decode(bytes);
+  info.wifi = text.includes('wifiInit()');
+  info.ble  = text.includes('bleInit()');
+
+  return info;
+}
+
 async function flashFirmware(file) {
   const payload = new Uint8Array(await file.arrayBuffer());
   const crc = crc32(payload);
@@ -732,6 +782,36 @@ $('btnDisconnect').addEventListener('click', disconnect);
 $('btnRefresh').addEventListener('click', refresh);
 $('btnScan').addEventListener('click', scan);
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
+
+$('fwFile').addEventListener('change', async () => {
+  const file = $('fwFile').files[0];
+  $('fwBar').style.width = '0';
+  $('fwNote').style.color = '';
+
+  if (!file) { $('fwNote').textContent = 'km0_km4_image2.bin 을 고를 것.'; return; }
+
+  const img = readImage(new Uint8Array(await file.arrayBuffer()));
+
+  if (!img.name) {
+    $('fwNote').textContent = '이미지 형식이 아니다. km0_km4_image2.bin 인지 확인할 것';
+    $('fwNote').style.color = 'var(--err)';
+    $('btnFlash').disabled = true;
+    return;
+  }
+
+  const feat = [img.wifi ? 'WiFi' : null, img.ble ? 'BLE' : null]
+                 .filter(Boolean).join(' + ') || '무선 없음';
+
+  /* 지금 붙어 있는 통로가 새 이미지에 없으면 올리는 순간 못 돌아온다. */
+  const lost = transport && transport.name === 'BLE' && !img.ble;
+
+  $('fwNote').textContent =
+    `${img.name} · ${img.ver} · ${feat} · ${file.size} B` +
+    (lost ? '   ⚠ 이 이미지에는 BLE 가 없다. 올리면 다시 붙지 못하고 USB 로만 복구된다' : '');
+  if (lost) $('fwNote').style.color = 'var(--err)';
+
+  $('btnFlash').disabled = !transport;
+});
 
 $('btnFlash').addEventListener('click', () => {
   const file = $('fwFile').files[0];
