@@ -831,13 +831,27 @@ $('fwFile').addEventListener('change', async () => {
 });
 
 $('btnReboot').addEventListener('click', async () => {
-  $('fwNote').textContent = '재부팅 중…';
+  const via = transport ? transport.name : '';
+
   $('btnReboot').hidden = true;
+  $('fwNote').textContent = '재부팅 중…';
 
-  /* 재부팅하면 응답도 링크도 끊긴다. 프롬프트를 기다리지 않는다. */
-  try { await send('reset reset', 1200); } catch (e) { /* 끊기는 것이 정상 */ }
+  /* 재부팅하면 응답이 오지 않는다. 프롬프트를 기다리지 않는다. */
+  try { await send('reset reset', 1200); } catch (e) { /* 정상 */ }
 
-  $('fwNote').textContent = '재부팅했다. 다시 연결할 것';
+  if (via === 'USB') {
+    /* USB 는 보드가 재부팅해도 포트가 살아 있다. CP2102N 이 MCU 와 별개로
+     * 켜져 있기 때문이다. 그래서 페이지는 끊긴 줄 모르고 옛 요약을 그대로
+     * 들고 있게 된다. 부팅을 기다렸다 다시 읽는다. */
+    $('term').textContent = '';
+    await new Promise((r) => setTimeout(r, 9000));
+    await refresh();
+    $('fwNote').textContent = '재부팅 완료';
+    say('새 펌웨어로 떴다', 'ok');
+  } else {
+    /* BLE 는 링크가 함께 사라진다. 끊김이 감지되면 요약도 지워진다. */
+    $('fwNote').textContent = '재부팅했다. 다시 연결할 것';
+  }
 });
 
 $('btnStop').addEventListener('click', () => {
