@@ -146,7 +146,11 @@ const PROMPT = 'cli# ';
 
 const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder();
-const dec = new TextDecoder();
+
+/* notify 는 20 바이트씩 잘려 온다. 한글은 UTF-8 로 3 바이트라 글자 하나가
+ * 두 패킷에 걸치는 일이 흔하다. 스트림 모드로 두어 걸친 조각을 이어 붙인다.
+ * 이걸 빠뜨리면 "동기됨" 이 "동???됨" 으로 보인다. */
+let dec = new TextDecoder('utf-8');
 
 let device = null;
 let rxChar = null;       /* 쓰기용 */
@@ -177,7 +181,7 @@ function setConnected(on) {
 /* 보드는 글자마다 에코를 돌려주고 끝에 프롬프트를 찍는다.
  * 프롬프트가 보이면 한 명령이 끝난 것으로 본다. */
 function onNotify(event) {
-  const text = dec.decode(event.target.value);
+  const text = dec.decode(event.target.value, { stream: true });
   rxBuf += text;
   termWrite(text);
 
@@ -279,6 +283,7 @@ async function connect() {
     await txChar.startNotifications();
     txChar.addEventListener('characteristicvaluechanged', onNotify);
 
+    dec = new TextDecoder('utf-8');   /* 이전 연결에서 남은 조각을 버린다 */
     setConnected(true);
     say('연결됨', 'ok');
     $('term').textContent = '';
