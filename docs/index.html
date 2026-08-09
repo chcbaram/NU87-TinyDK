@@ -171,7 +171,7 @@
   #term {
     font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
     background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
-    padding: 10px; flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 8px;
+    padding: 10px; height: 170px; overflow-y: auto; margin-bottom: 8px;
   }
   footer.fold #term { display: none; }
   footer .panelhead { margin-bottom: 10px; }
@@ -732,58 +732,52 @@ $('btnRefresh').addEventListener('click', refresh);
 $('btnScan').addEventListener('click', scan);
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
 
-/* 콘솔 높이 — 분리막을 끌어 나눈다. 다음에 열 때도 그 높이를 쓴다. */
-const CONSOLE_MIN = 108;     /* 제목줄 + 입력줄만 남는 높이 */
+/* 콘솔 높이 — 분리막을 끌어 조절한다. term 높이만 바꾸면 나머지는 따라온다.
+ * 시작점 대비 이동량으로 계산한다. 절대 좌표로 하면 여백을 하나라도 빠뜨렸을 때
+ * 커서와 경계가 어긋난다. */
+const TERM_MIN = 0;
 
-/* 상한은 화면 높이로 잡는다. 앱의 측정 높이를 쓰면, 한 번 넘친 순간 그 값도
- * 같이 커져서 끌수록 계속 커지는 되먹임이 생긴다. */
-function setConsoleHeight(px) {
-  const vh  = document.documentElement.clientHeight;
-  const max = Math.max(CONSOLE_MIN, vh - 260);   /* 헤더+상태+탭+최소 내용 */
-  const h   = Math.min(max, Math.max(CONSOLE_MIN, Math.round(px)));
+function setTermHeight(px) {
+  const max = Math.max(60, document.documentElement.clientHeight - 380);
+  const h = Math.min(max, Math.max(TERM_MIN, Math.round(px)));
 
-  $('console').style.height = h + 'px';
-  $('console').classList.toggle('fold', h <= CONSOLE_MIN);
-  $('btnFold').textContent = h <= CONSOLE_MIN ? '펴기' : '접기';
-  localStorage.setItem('consoleHeight', h);
+  $('term').style.height = h + 'px';
+  $('console').classList.toggle('fold', h <= TERM_MIN);
+  $('btnFold').textContent = h <= TERM_MIN ? '펴기' : '접기';
+  localStorage.setItem('termHeight', h);
 }
 
-setConsoleHeight(+localStorage.getItem('consoleHeight') || 220);
+setTermHeight(+localStorage.getItem('termHeight') ?? 170);
 
-/* 창 크기가 바뀌면 상한도 바뀐다. 다시 맞춘다. */
-addEventListener('resize', () => setConsoleHeight($('console').offsetHeight));
+addEventListener('resize', () => setTermHeight($('term').offsetHeight));
 
 $('btnFold').addEventListener('click', () => {
-  const folded = $('console').classList.contains('fold');
-  setConsoleHeight(folded ? 220 : CONSOLE_MIN);
+  setTermHeight($('console').classList.contains('fold') ? 170 : TERM_MIN);
 });
 
 {
   const sp = $('splitter');
+  let startY = 0;
+  let startH = 0;
   let dragging = false;
 
   sp.addEventListener('pointerdown', (e) => {
     dragging = true;
+    startY = e.clientY;
+    startH = $('term').offsetHeight;
     sp.classList.add('drag');
     sp.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
 
   sp.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    setConsoleHeight(document.documentElement.clientHeight - e.clientY);
+    if (dragging) setTermHeight(startH + (startY - e.clientY));
   });
 
   const stop = () => { dragging = false; sp.classList.remove('drag'); };
   sp.addEventListener('pointerup', stop);
   sp.addEventListener('pointercancel', stop);
 }
-
-$('btnFlash').addEventListener('click', () => {
-  const file = $('fwFile').files[0];
-  if (!file) { say('파일을 고를 것', 'err'); return; }
-  flashFirmware(file);
-});
 
 $('wifiForm').addEventListener('submit', async (e) => {
   e.preventDefault();
