@@ -13,6 +13,7 @@
  */
 
 #include "net.h"
+#include "net_data.h"
 
 
 #ifdef _USE_HW_WIFI
@@ -43,6 +44,9 @@
 /* PC 에서 보드를 찾는 용도. tools/discover.py 가 이 포트로 브로드캐스트한다. */
 #define NET_DISCOVER_PORT     50000
 #define NET_DISCOVER_REQ      "NU87?"
+
+/* 펌웨어 업데이트용 원시 데이터 포트. 브라우저는 raw TCP 를 못 열어서 PC 도구 몫이다. */
+#define NET_DATA_PORT         5000
 
 /* mDNS. 이 이름이 nu87-tinydk.local 이 되고 DHCP 요청에도 실린다. */
 #define NET_MDNS_HOSTNAME     "nu87-tinydk"
@@ -87,6 +91,7 @@ static void cliNet(cli_args_t *args);
 bool netInit(void)
 {
   netCfgLoad();
+  netDataInit(NET_DATA_PORT);
 
   is_init = true;
 
@@ -213,6 +218,7 @@ static void netThread(void *arg)
           netSyncTime();
         }
         netDiscoverPoll();
+        netDataPoll();
         break;
     }
 

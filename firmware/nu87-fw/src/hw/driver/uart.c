@@ -40,11 +40,12 @@ static const char *uart_name[UART_MAX_CH] =
 {
   "LOGUART  PA7/PA8",
 #ifdef _USE_HW_WIFI
+  /* BLE 를 끄더라도 자리를 비워 두지 않는다. 채널 번호가 구성에 따라 바뀌면
+   * ota write 에 넘기는 번호도 달라져 호스트 도구가 구성을 알아야 한다. */
   "NET      telnet",
-#endif
-#ifdef _USE_HW_BLE
   "BLE      cli",
   "BLE      data",
+  "NET      data",
 #endif
 };
 

@@ -30,16 +30,10 @@
 #define      HW_UART_CH_CLI         HW_UART_CH_LOG
 #ifdef _USE_HW_WIFI
 #define      HW_UART_CH_NET         _DEF_UART2   /* cli_net 이 텔넷 소켓을 물린다 */
-#endif
-#ifdef _USE_HW_BLE
 #define      HW_UART_CH_BLE         _DEF_UART3   /* cli_ble 가 GATT 를 물린다 */
-#define      HW_UART_CH_BLE_DATA    _DEF_UART4   /* 원시 데이터. 펌웨어 업데이트용 */
-#endif
-
-#if   defined(_USE_HW_BLE)
-#define      HW_UART_MAX_CH         4
-#elif defined(_USE_HW_WIFI)
-#define      HW_UART_MAX_CH         2
+#define      HW_UART_CH_BLE_DATA    _DEF_UART4   /* BLE 원시 데이터 */
+#define      HW_UART_CH_NET_DATA    _DEF_UART5   /* TCP 원시 데이터 */
+#define      HW_UART_MAX_CH         5
 #else
 #define      HW_UART_MAX_CH         1
 #endif
