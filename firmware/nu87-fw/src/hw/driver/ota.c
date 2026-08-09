@@ -360,6 +360,7 @@ void cliOta(cli_args_t *args)
 
   if (args->argc == 1 && args->isStr(0, "info"))
   {
+    cliPrintf("ver   : %s\n", _DEF_FIRMWATRE_VERSION);
     cliPrintf("실행  : OTA%d  (0x%08X)\n", info.slot_run + 1,
               (unsigned int)(SPI_FLASH_BASE + info.addr_run));
     cliPrintf("대상  : OTA%d  (0x%08X)\n", info.slot_target + 1,
