@@ -251,6 +251,7 @@
       <div class="row">
         <input type="file" id="fwFile" accept=".bin" style="flex:1;min-width:200px">
         <button class="primary" id="btnFlash" disabled>보내기</button>
+        <button id="btnStop" hidden>중지</button>
       </div>
       <div class="bar"><div id="fwBar"></div></div>
       <p class="note" id="fwNote">km0_km4_image2.bin 을 고를 것.</p>
@@ -293,6 +294,7 @@ const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder();
 
 let transport = null;    /* { name, writeCli, writeDat, onDat, close } */
+let stopFlash = false;
 let rxBuf  = '';
 let waiter = null;
 
@@ -718,6 +720,8 @@ async function flashFirmware(file) {
   const crc = crc32(payload);
 
   $('btnFlash').disabled = true;
+  $('btnStop').hidden = false;
+  stopFlash = false;
   $('fwNote').textContent = `${file.name} · ${payload.length} B · crc32 0x${crc.toString(16).toUpperCase()}`;
 
   try {
@@ -732,6 +736,13 @@ async function flashFirmware(file) {
     const started = Date.now();
 
     while (sent < payload.length) {
+      /* 길이 0 을 보내면 보드가 받기를 그만둔다. 그냥 끊으면 5초 뒤
+       * 타임아웃으로 끝나는데 그건 사고와 구분이 되지 않는다. */
+      if (stopFlash) {
+        await transport.writeDat(new Uint8Array([0, 0]));
+        throw new Error('중지했다. 지금 펌웨어는 그대로다');
+      }
+
       const chunk = payload.slice(sent, sent + CHUNK);
       await transport.writeDat(frame(chunk));
 
@@ -759,6 +770,7 @@ async function flashFirmware(file) {
   }
 
   transport.onDat(null);
+  $('btnStop').hidden = true;
   $('btnFlash').disabled = false;
 }
 
@@ -811,6 +823,12 @@ $('fwFile').addEventListener('change', async () => {
   if (lost) $('fwNote').style.color = 'var(--err)';
 
   $('btnFlash').disabled = !transport;
+});
+
+$('btnStop').addEventListener('click', () => {
+  stopFlash = true;
+  $('btnStop').disabled = true;
+  setTimeout(() => { $('btnStop').disabled = false; }, 1000);
 });
 
 $('btnFlash').addEventListener('click', () => {

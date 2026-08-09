@@ -101,7 +101,11 @@ def update(port, image, baud=115200):
 
     while sent < len(payload):
         chunk = payload[sent:sent + CHUNK]
-        ser.write(frame(chunk))
+        try:
+            ser.write(frame(chunk))
+        except KeyboardInterrupt:
+            ser.write(b"\x00\x00")     # 길이 0 = 중지
+            raise
 
         if wait_for(ser, "a") == "r":
             resend += 1
@@ -133,6 +137,9 @@ def main():
 
     try:
         update(args.port, args.image, args.baud)
+    except KeyboardInterrupt:
+        print("\n중지했다. 지금 펌웨어는 그대로다")
+        return 1
     except (OtaError, OSError) as e:
         print(f"\n실패: {e}")
         return 1

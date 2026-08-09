@@ -234,7 +234,15 @@ uint16_t otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc)
     }
     len = head[0] | (head[1] << 8);
 
-    if (len == 0 || len > OTA_CHUNK_MAX || len > left)
+    /* 길이 0 은 호스트가 그만두겠다는 뜻이다. 아무것도 안 보내고 사라지면
+     * 5초 뒤 타임아웃으로 끝나긴 하는데, 사고와 구분이 되지 않는다. */
+    if (len == 0)
+    {
+      err = ERR_OTA_CANCEL;
+      break;
+    }
+
+    if (len > OTA_CHUNK_MAX || len > left)
     {
       err = ERR_OTA_SIZE;
       break;

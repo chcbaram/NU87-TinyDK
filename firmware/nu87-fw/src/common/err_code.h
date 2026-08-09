@@ -38,6 +38,7 @@
 #define ERR_OTA_FLASH_WRITE           0x0044
 #define ERR_OTA_CRC                   0x0045
 #define ERR_OTA_NOT_BEGIN             0x0046
+#define ERR_OTA_CANCEL                0x0047
 
 
 #endif 
