@@ -252,6 +252,7 @@
         <input type="file" id="fwFile" accept=".bin" style="flex:1;min-width:200px">
         <button class="primary" id="btnFlash" disabled>보내기</button>
         <button id="btnStop" hidden>중지</button>
+        <button class="primary" id="btnReboot" hidden>재부팅</button>
       </div>
       <div class="bar"><div id="fwBar"></div></div>
       <p class="note" id="fwNote">km0_km4_image2.bin 을 고를 것.</p>
@@ -721,6 +722,7 @@ async function flashFirmware(file) {
 
   $('btnFlash').disabled = true;
   $('btnStop').hidden = false;
+  $('btnReboot').hidden = true;
   stopFlash = false;
   $('fwNote').textContent = `${file.name} · ${payload.length} B · crc32 0x${crc.toString(16).toUpperCase()}`;
 
@@ -762,8 +764,11 @@ async function flashFirmware(file) {
 
     await readLine('ok', 30000);
 
-    $('fwNote').textContent = '전환 완료. 재부팅하면 새 펌웨어로 뜬다';
-    say('업데이트 완료', 'ok');
+    /* 슬롯만 바꿔 두었을 뿐 지금은 여전히 옛 펌웨어가 돌고 있다.
+     * 그래서 링크도 그대로다. 적용하려면 재부팅해야 한다. */
+    $('fwNote').textContent = '전환 완료. 재부팅해야 새 펌웨어로 뜬다';
+    $('btnReboot').hidden = false;
+    say('업데이트 완료 — 재부팅하면 적용된다', 'ok');
   } catch (e) {
     $('fwNote').textContent = '실패: ' + e.message;
     say(e.message, 'err');
@@ -823,6 +828,16 @@ $('fwFile').addEventListener('change', async () => {
   if (lost) $('fwNote').style.color = 'var(--err)';
 
   $('btnFlash').disabled = !transport;
+});
+
+$('btnReboot').addEventListener('click', async () => {
+  $('fwNote').textContent = '재부팅 중…';
+  $('btnReboot').hidden = true;
+
+  /* 재부팅하면 응답도 링크도 끊긴다. 프롬프트를 기다리지 않는다. */
+  try { await send('reset reset', 1200); } catch (e) { /* 끊기는 것이 정상 */ }
+
+  $('fwNote').textContent = '재부팅했다. 다시 연결할 것';
 });
 
 $('btnStop').addEventListener('click', () => {
