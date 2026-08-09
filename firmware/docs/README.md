@@ -22,8 +22,9 @@ STM32H5 기반 `nu87-fw` 프로젝트를 **NU87 모듈(Realtek RTL8720DF / Ameba
 | 09 | [BSP 계층](09-bsp.md) | 진입점, 링커스크립트, 시간 기반, **첫 부팅까지 막혔던 3가지** | ✅ |
 | 10 | [LED · GPIO · RESET](10-driver-led-gpio-reset.md) | RGB LED, 헤더 GPIO, **NVIC_SystemReset 을 쓰면 안 되는 이유** | ✅ |
 | 11 | [UART / LOG / CLI](11-driver-uart-log-cli.md) | LOGUART 는 범용 UART 가 아니다, 폴링 방식과 그 한계 | ✅ |
-| 12 | [무선 구성 계획](12-wireless-plan.md) | WiFi/BLE 적용 시 구조와 예상 문제 | 🚧 |
-| 13 | [부트로더 / OTA 계획](13-bootloader-ota.md) | OTA1/OTA2, cmd_driver_t 로 WiFi·BLE 업데이트 확장 | 🚧 |
+| 12 | [무선 — WiFi · BLE](12-wireless.md) | 라디오 공존, net 모듈, mDNS, **BLE 는 16비트 UUID 여야 하는 이유** | ✅ |
+| 13 | [펌웨어 업데이트 (OTA)](13-ota.md) | A/B 슬롯 전환, 청크 프로토콜, USB / BLE / 웹페이지 | ✅ |
+| 14 | [설정 페이지](14-web-page.md) | Web Bluetooth · Web Serial 로 붙는 GitHub Pages 도구 | ✅ |
 
 ✅ 완료 · 🚧 진행 중/예정
 
@@ -41,14 +42,23 @@ STM32H5 기반 `nu87-fw` 프로젝트를 **NU87 모듈(Realtek RTL8720DF / Ameba
 ## 빠른 참조
 
 ```bash
-# 빌드
-cd firmware/nu87-fw && cmake -S . -B build && cmake --build build -j
+# 빌드 (무선을 쓰려면 옵션을 준다. BLE 는 WiFi 를 요구한다)
+cd firmware/nu87-fw && cmake -S . -B build -DNU87_WIFI=ON -DNU87_BLE=ON
+cmake --build build -j
 
 # UART 플래싱 (CP2102N 자동 다운로드)
 python3 firm-sdk/tools/flash.py --port /dev/cu.usbserial-0001
 
-# 콘솔
+# 콘솔 — 같은 CLI 가 세 통로로 나온다
 python3 -m serial.tools.miniterm --rts 0 --dtr 0 /dev/cu.usbserial-0001 115200
+telnet nu87-tinydk.local                      # WiFi 접속 후
+#   BLE 는 설정 페이지에서 (docs/index.html)
+
+# 실행 중인 펌웨어에 밀어넣기 (반대편 슬롯. 실패해도 지금 것이 남는다)
+python3 firm-sdk/tools/ota.py --port /dev/cu.usbserial-0001 --image build/km0_km4_image2.bin
+
+# 같은 네트워크의 보드 찾기
+python3 firm-sdk/tools/discover.py
 
 # SWD 디버깅
 openocd -f firm-sdk/tools/openocd/nu87.cfg
