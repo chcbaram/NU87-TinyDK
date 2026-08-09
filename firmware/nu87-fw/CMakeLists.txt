@@ -517,7 +517,9 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 add_custom_command(TARGET ${EXECUTABLE}
   POST_BUILD
-  COMMAND ${CMAKE_OBJCOPY} -O binary ${EXECUTABLE} ${PRJ_NAME}.bin
+  # 통짜 objcopy 는 하지 않는다. 섹션이 플래시(0x0E000020)와 SRAM(0x10005000)
+  # 으로 33MB 떨어져 있어 그 틈이 0 으로 채워진 33.6MB 파일이 나온다.
+  # STM32 시절 플래시가 한 덩어리일 때의 잔재다. 실제 이미지는 아래가 만든다.
   COMMAND ${Python3_EXECUTABLE} ${FIRM_SDK_DIR}/tools/make_image.py
           --elf     ${EXECUTABLE}
           --map     ${PRJ_NAME}.map
