@@ -111,6 +111,41 @@ component/soc/realtek/amebad/misc/rtl8721d_freertos_pmu.h        -> misc/rtl8721
 component/common/file_system/ftl/                                -> file_system/ftl/
 component/common/file_system/kv/                                 -> file_system/kv/
 
+# ══════════════════════════════════════════════════════════════════════════
+#  BLE
+# ══════════════════════════════════════════════════════════════════════════
+#  btgap.a(615KB, 75 멤버)가 스택 본체다. 외부 의존은 63 개뿐이고 그 중
+#    osif_*      45 개 -> board/common/os/freertos/osif_freertos.c
+#    hci_tp_*     6 개 -> board/common/src/hci_adapter.c + board/amebad/src/hci/
+#    ftl_*        2 개 -> file_system/ftl/ftl.c  (위에서 이미 가져온다)
+#    trace_print       -> board/common/src/trace_task.c
+#  나머지는 libc 다.
+#
+#  WiFi 와 동시에 돈다. RTL8720DF 는 2.4GHz 라디오와 안테나가 하나뿐이라
+#  실제로는 SoC 안의 조정기가 시간을 나눠 쓴다. rtk_coex.c 가 BT 스택과
+#  WiFi 드라이버 사이의 우편함이다 (rltk_coex_mailbox_to_wifi).
+component/common/bluetooth/realtek/sdk/inc/                      -> bluetooth/inc/
+component/common/bluetooth/realtek/sdk/board/common/             -> bluetooth/board/common/
+component/common/bluetooth/realtek/sdk/board/amebad/             -> bluetooth/board/amebad/
+component/common/bluetooth/realtek/sdk/src/                      -> bluetooth/src/
+component/common/bluetooth/realtek/sdk/bt_example_entry.h        -> bluetooth/bt_example_entry.h
+
+# FTL 이 플래시를 읽고 쓰는 경로. 헤더 체인은 mbed HAL 이지만 소스는 이 하나다.
+component/common/mbed/hal_ext/flash_api.h                        -> mbed/hal_ext/flash_api.h
+component/common/mbed/hal/pinmap.h                               -> mbed/hal/pinmap.h
+# hci_board.c 가 BT MAC 주소를 efuse 에서 읽는다.
+component/common/mbed/hal_ext/efuse_api.h                        -> mbed/hal_ext/efuse_api.h
+component/common/mbed/targets/hal/rtl8721d/efuse_api.c           -> mbed/efuse_api.c
+# bt_uart_bridge.c 용. 우리는 빌드하지 않지만 헤더 체인이 걸린다.
+component/common/mbed/hal/serial_api.h                           -> mbed/hal/serial_api.h
+component/common/api/at_cmd/log_service.h                        -> api/at_cmd/log_service.h
+component/common/mbed/targets/hal/rtl8721d/flash_api.c           -> mbed/flash_api.c
+component/common/mbed/targets/hal/rtl8721d/device.h              -> mbed/device.h
+component/common/mbed/targets/hal/rtl8721d/objects.h             -> mbed/objects.h
+component/common/mbed/targets/hal/rtl8721d/PinNames.h            -> mbed/PinNames.h
+component/common/mbed/targets/hal/rtl8721d/PortNames.h           -> mbed/PortNames.h
+component/common/mbed/targets/hal/rtl8721d/PeripheralNames.h     -> mbed/PeripheralNames.h
+
 # ── UART 펌웨어 업데이트 (common/hw/include/ymodem.h 대응) ────────────────
 #  XModem 구현체는 ROM 에 있고 여기 있는 것은 헤더뿐이다.
 component/soc/realtek/amebad/app/xmodem/                         -> app/xmodem/

@@ -1,0 +1,43 @@
+Ameba-D SDK: rtl8721d_ota.c 의 FatFs include 를 opt-in 으로
+
+문제
+----
+misc/rtl8721d_ota.c 가 ff.h / ff_driver.h / fatfs_sdcard_api.h / sdcard.h 를
+조건 없이 include 한다. 정작 이들을 쓰는 sdcard_update_ota() 는 이미
+SDCARD_OTA_UPDATE 로 막혀 있다.
+
+BLE 를 켜면 hci_board.c 가 ota_get_cur_index() 를 부른다. 어느 OTA 슬롯에서
+부팅했는지에 따라 BT ROM 패치 주소가 달라지기 때문이다. 그 함수 하나 때문에
+이 파일을 빌드에 넣으면 SD 카드와 무관하게 FatFs 전체가 따라온다.
+
+    misc/rtl8721d_ota.c:65:10: fatal error: ff.h: No such file or directory
+
+해결
+----
+include 와 SD_OTA_BUF_SIZE 를 SDCARD_OTA_UPDATE 로 감싼다. 사용부의 조건과
+같아질 뿐 동작은 달라지지 않는다. 패치 0001 이 헤더에 한 것과 같은 성격이다.
+
+--- a/misc/rtl8721d_ota.c
++++ b/misc/rtl8721d_ota.c
+@@ -62,14 +62,20 @@
+ #include "lwip/netdb.h"
+ 
+ #include "osdep_service.h"
++#include "flash_api.h"
++
++/* FatFs 는 sdcard_update_ota() 에서만 쓴다. 그 함수는 이미 SDCARD_OTA_UPDATE
++ * 로 막혀 있는데 include 만 무조건이라, SD 카드를 안 써도 FatFs 헤더 전체가
++ * 필요해진다. */
++#ifdef SDCARD_OTA_UPDATE
+ #include "ff.h"
+ #include <fatfs_ext/inc/ff_driver.h>
+ #include "fatfs_sdcard_api.h"
+-#include "flash_api.h"
+ #include <disk_if/inc/sdcard.h>
+ 
+ // larger _MAX_SS would accelerate the OTA procedure
+ #define SD_OTA_BUF_SIZE _MAX_SS
++#endif
+ 
+ void rtc_backup_timeinfo(void);
+ sys_thread_t TaskOTA = NULL;

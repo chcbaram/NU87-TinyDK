@@ -76,6 +76,15 @@ if(NU87_WIFI AND NOT NU87_RTOS)
 endif()
 message(STATUS "WiFi: ${NU87_WIFI}")
 
+# ── BLE ─────────────────────────────────────────────────────────────────────
+# btgap.a 를 링크하고 osif / HCI / 프로파일 소스를 함께 빌드한다.
+# WiFi 와 라디오를 나눠 쓰므로 rtk_coex.c 가 둘 사이를 중재한다.
+option(NU87_BLE "BLE 사용" OFF)
+if(NU87_BLE AND NOT NU87_WIFI)
+  message(FATAL_ERROR "NU87_BLE 는 NU87_WIFI 를 요구합니다 (라디오 공존 + osdep 공유)")
+endif()
+message(STATUS "BLE: ${NU87_BLE}")
+
 set(FREERTOS_DIR ${REALTEK_DIR}/freertos)
 
 if(NU87_RTOS)
@@ -160,6 +169,51 @@ if(NU87_WIFI)
 endif()
 
 
+# ── BLE 소스 ────────────────────────────────────────────────────────────────
+# 목록 근거는 SDK 의 project_hp/asdk/make/rtl_bluetooth/*/Makefile 이다.
+set(SRC_FILES_BLE)
+
+if(NU87_BLE)
+  set(BT_DIR ${REALTEK_DIR}/bluetooth)
+
+  set(SRC_FILES_BLE
+    # OS 추상화. btgap.a 외부 의존 63 개 중 45 개가 여기서 나온다.
+    ${BT_DIR}/board/common/os/freertos/osif_freertos.c
+
+    # HCI 전송. btgap.a 가 hci_tp_* 로 부른다.
+    ${BT_DIR}/board/common/src/hci_adapter.c
+    ${BT_DIR}/board/common/src/hci_process.c
+    ${BT_DIR}/board/common/src/cycle_queue.c
+    ${BT_DIR}/board/common/src/trace_task.c
+
+    # rtl8721d_bt.c 는 넣지 않는다. 이미 lib_wlan.a 안에 있고
+    # (bt_get_patch_code_8721d / Hal_BT_Is_Supported / rtlbt_fw)
+    # SDK 의 BT 빌드 목록에도 없다. 참조용으로만 벤더링돼 있다.
+    ${BT_DIR}/board/amebad/src/platform_utils.c
+    ${BT_DIR}/board/amebad/src/trace_uart.c
+    # WiFi 와의 라디오 공존 우편함
+    ${BT_DIR}/board/amebad/src/rtk_coex.c
+    ${BT_DIR}/board/amebad/src/hci/hci_board.c
+    ${BT_DIR}/board/amebad/src/hci/hci_uart.c
+    ${BT_DIR}/board/amebad/src/hci/bt_fwconfig.c
+    # lib_wlan.a 의 rtlbt_fw 는 weak 인 빈 배열이다. 실제 패치는 여기서 온다.
+    ${BT_DIR}/board/amebad/src/hci/bt_normal_patch.c
+    ${BT_DIR}/board/amebad/src/hci/bt_mp_patch.c
+    ${BT_DIR}/board/amebad/src/vendor_cmd/vendor_cmd.c
+
+    # hci_board.c 가 ota_get_cur_index() 로 어느 슬롯에서 부팅했는지 물어
+    # BT ROM 패치 주소를 고른다.
+    ${REALTEK_DIR}/misc/rtl8721d_ota.c
+
+    # 본딩키 저장. 플래시 끝단 예약 영역을 쓴다 (docs/06 §6.4.1)
+    ${REALTEK_DIR}/file_system/ftl/ftl.c
+    ${REALTEK_DIR}/mbed/flash_api.c
+    # hci_board.c 가 BT MAC 을 efuse 에서 읽는다.
+    ${REALTEK_DIR}/mbed/efuse_api.c
+  )
+endif()
+
+
 # 특정 파일을 빌드에서 제외한다.
 #
 # 근거는 docs/05-build-system.md §5.4 에 정리했다. 요약:
@@ -210,6 +264,7 @@ add_executable(${EXECUTABLE}
   ${SRC_FILES_VENDOR}
   ${SRC_FILES_FREERTOS}
   ${SRC_FILES_WIFI}
+  ${SRC_FILES_BLE}
 )
 
 
@@ -247,6 +302,41 @@ if(NU87_RTOS)
     ${FREERTOS_DIR}
     ${FREERTOS_DIR}/Source/include
     ${FREERTOS_DIR}/Source/portable/GCC/RTL8721D_HP/non_secure
+  )
+endif()
+
+if(NU87_BLE)
+  target_include_directories(${EXECUTABLE} PRIVATE
+    ${REALTEK_DIR}/bluetooth
+    ${REALTEK_DIR}/bluetooth/inc
+    ${REALTEK_DIR}/bluetooth/inc/app
+    ${REALTEK_DIR}/bluetooth/inc/os
+    ${REALTEK_DIR}/bluetooth/inc/platform
+    ${REALTEK_DIR}/bluetooth/inc/stack
+    ${REALTEK_DIR}/bluetooth/inc/bluetooth/gap
+    ${REALTEK_DIR}/bluetooth/inc/bluetooth/gap/gap_lib
+    ${REALTEK_DIR}/bluetooth/inc/bluetooth/profile
+    ${REALTEK_DIR}/bluetooth/inc/bluetooth/profile/client
+    ${REALTEK_DIR}/bluetooth/inc/bluetooth/profile/server
+    ${REALTEK_DIR}/bluetooth/board/common/inc
+    ${REALTEK_DIR}/bluetooth/board/amebad/src
+    ${REALTEK_DIR}/bluetooth/board/amebad/src/hci
+    ${REALTEK_DIR}/bluetooth/board/amebad/src/vendor_cmd
+    ${REALTEK_DIR}/bluetooth/board/amebad/lib
+    ${REALTEK_DIR}/file_system/ftl
+    ${REALTEK_DIR}/api/at_cmd
+    ${REALTEK_DIR}/mbed
+    ${REALTEK_DIR}/mbed/hal
+    ${REALTEK_DIR}/mbed/hal_ext
+  )
+  target_link_libraries(${EXECUTABLE} PRIVATE
+    ${REALTEK_DIR}/bluetooth/board/amebad/lib/btgap.a
+  )
+
+  # 벤더 코드다. 우리 소스와 같은 -Wall 기준을 강요하지 않는다.
+  set_source_files_properties(
+    ${SRC_FILES_BLE}
+    PROPERTIES COMPILE_OPTIONS "${NU87_VENDOR_RELAX_FLAGS}"
   )
 endif()
 
@@ -302,6 +392,7 @@ target_compile_definitions(${EXECUTABLE} PRIVATE
   # 명령줄로 정의해야 bsp.h 가 hw_def.h 보다 먼저 처리될 때도 값이 잡힌다.
   $<$<BOOL:${NU87_RTOS}>:_USE_HW_RTOS>
   $<$<BOOL:${NU87_WIFI}>:_USE_HW_WIFI>
+  $<$<BOOL:${NU87_BLE}>:_USE_HW_BLE>
 )
 
 

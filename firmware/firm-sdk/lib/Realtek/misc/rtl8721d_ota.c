@@ -62,14 +62,20 @@
 #include "lwip/netdb.h"
 
 #include "osdep_service.h"
+#include "flash_api.h"
+
+/* FatFs 는 sdcard_update_ota() 에서만 쓴다. 그 함수는 이미 SDCARD_OTA_UPDATE
+ * 로 막혀 있는데 include 만 무조건이라, SD 카드를 안 써도 FatFs 헤더 전체가
+ * 필요해진다. */
+#ifdef SDCARD_OTA_UPDATE
 #include "ff.h"
 #include <fatfs_ext/inc/ff_driver.h>
 #include "fatfs_sdcard_api.h"
-#include "flash_api.h"
 #include <disk_if/inc/sdcard.h>
 
 // larger _MAX_SS would accelerate the OTA procedure
 #define SD_OTA_BUF_SIZE _MAX_SS
+#endif
 
 void rtc_backup_timeinfo(void);
 sys_thread_t TaskOTA = NULL;

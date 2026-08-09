@@ -3,4 +3,4 @@
 repo=https://github.com/Ameba-AIoT/ameba-rtos-d
 commit=7569200fb8304daa61a9f09ccf439ada38d6de2e
 date=2026-06-18
-patches=2
+patches=3
