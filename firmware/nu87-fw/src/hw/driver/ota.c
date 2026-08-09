@@ -41,9 +41,9 @@
 /* 시그니처를 보류해 두는 동안 쓰는 값. 지운 직후 상태 그대로다. */
 #define OTA_SIG_BLANK         0xFF
 
-/* 청크마다 ack 를 돌려 호스트를 재운다. 이게 없으면 보내는 쪽이 쏟아부어
+/* 청크마다 응답을 돌려 호스트를 재운다. 이게 없으면 보내는 쪽이 쏟아부어
  * 수신 큐가 넘친다. BLE 채널 큐가 2KB 라 그보다 작아야 한다. */
-#define OTA_CHUNK_SIZE        1024
+#define OTA_CHUNK_MAX         1024
 #define OTA_RX_TIMEOUT_MS     5000
 
 
@@ -54,7 +54,7 @@ static uint8_t    sig_hold[OTA_SIG_LEN];
 static uint32_t   erased_upto;      /* 이 오프셋 앞까지는 지워 두었다 */
 
 static uint8_t  otaGetRunSlot(void);
-static uint32_t otaReadChunk(uint8_t uart_ch, uint8_t *p_buf, uint32_t length);
+static uint32_t otaReadRaw(uint8_t uart_ch, uint8_t *p_buf, uint32_t length);
 static uint32_t otaSlotAddr(uint8_t slot);
 static bool     otaEraseUpto(uint32_t offset);
 static uint32_t otaCrc32(uint32_t addr, uint32_t length);
@@ -94,28 +94,28 @@ bool otaGetInfo(ota_info_t *p_info)
   return true;
 }
 
-bool otaBegin(uint32_t size)
+uint16_t otaBegin(uint32_t size)
 {
-  if (!is_init)                return false;
-  if (size < OTA_SIG_LEN)      return false;
-  if (size > info.size_max)    return false;
+  if (!is_init)             return ERR_OTA_BEGIN;
+  if (size < OTA_SIG_LEN)   return ERR_OTA_SIZE;
+  if (size > info.size_max) return ERR_OTA_SIZE;
 
   info.is_busy = true;
   info.written = 0;
   erased_upto  = 0;
 
   memset(sig_hold, OTA_SIG_BLANK, OTA_SIG_LEN);
-  return true;
+  return OK;
 }
 
-bool otaWrite(uint8_t *p_data, uint32_t length)
+uint16_t otaWrite(uint8_t *p_data, uint32_t length)
 {
   uint32_t offset = info.written;
 
-  if (info.is_busy == false) return false;
-  if (offset + length > info.size_max) return false;
+  if (info.is_busy == false)           return ERR_OTA_NOT_BEGIN;
+  if (offset + length > info.size_max) return ERR_OTA_SIZE;
 
-  if (otaEraseUpto(offset + length) == false) return false;
+  if (otaEraseUpto(offset + length) == false) return ERR_OTA_FLASH_WRITE;
 
   /* 시그니처는 아직 쓰지 않는다. 다 받고 검증한 뒤에야 유효해져야 한다. */
   while (length > 0 && offset < OTA_SIG_LEN)
@@ -144,14 +144,14 @@ bool otaWrite(uint8_t *p_data, uint32_t length)
   }
 
   info.written = offset;
-  return true;
+  return OK;
 }
 
-bool otaEnd(uint32_t crc)
+uint16_t otaEnd(uint32_t crc)
 {
   uint32_t calc;
 
-  if (info.is_busy == false) return false;
+  if (info.is_busy == false) return ERR_OTA_NOT_BEGIN;
 
   /* 시그니처는 아직 플래시에 없으므로 그 부분만 보류분으로 대신 계산한다. */
   calc = otaCrc32(info.addr_target, info.written);
@@ -161,7 +161,7 @@ bool otaEnd(uint32_t crc)
     logPrintf("[E_] ota : crc 불일치  받은 0x%08X  계산 0x%08X\n",
               (unsigned int)crc, (unsigned int)calc);
     otaAbort();
-    return false;
+    return ERR_OTA_CRC;
   }
 
   /* 여기부터가 전환이다. 순서를 지켜야 한다. */
@@ -175,7 +175,7 @@ bool otaEnd(uint32_t crc)
 
   info.is_busy = false;
   logPrintf("[OK] ota : OTA%d 로 전환. 재부팅하면 적용된다\n", info.slot_target + 1);
-  return true;
+  return OK;
 }
 
 bool otaAbort(void)
@@ -191,22 +191,30 @@ bool otaAbort(void)
  * SDK 의 ota_get_cur_index() 와 같은 계산이지만 직접 한다. 그 함수가 있는
  * misc/rtl8721d_ota.c 는 lwIP 와 FatFs 를 include 해서, 레지스터 두 개
  * 읽자고 네트워크 스택 전체를 끌어오게 된다. */
-/* 이미지 하나를 통째로 받는다. 주고받는 말은 이게 전부다.
+/* 이미지 하나를 통째로 받는다.
  *
- *   보드 -> ready       준비됐다. 지금부터 원시 바이트다
- *   호스트 -> 청크
- *   보드 -> a           한 청크 받았다. 다음을 보내라
- *   보드 -> ok / err    끝
+ * 청크마다 길이와 체크섬을 붙인다. 프레이밍이 없으면 링크에서 한 바이트만
+ * 밀려도 마지막 CRC 에서야 드러나고, 그때는 처음부터 다시 보내야 한다.
+ * 747KB 를 다시 보내는 것과 1KB 를 다시 보내는 것의 차이다.
+ *
+ *   보드 -> ready       준비됐다
+ *   호스트 -> len(2 LE) | data | sum(1)
+ *   보드 -> a           받았다, 다음
+ *          r           체크섬이 어긋났다, 같은 청크를 다시
+ *          e<코드>      치명적. 중단한다
+ *   보드 -> ok / e<코드>
  */
-bool otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc)
+uint16_t otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc)
 {
-  static uint8_t buf[OTA_CHUNK_SIZE];
+  static uint8_t buf[OTA_CHUNK_MAX];
   uint32_t left = size;
+  uint16_t err;
 
-  if (otaBegin(size) == false)
+  err = otaBegin(size);
+  if (err != OK)
   {
-    uartPrintf(uart_ch, "err begin\n");
-    return false;
+    uartPrintf(uart_ch, "e%04X\n", err);
+    return err;
   }
 
   uartFlush(uart_ch);
@@ -214,37 +222,62 @@ bool otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc)
 
   while (left > 0)
   {
-    uint32_t want = (left > OTA_CHUNK_SIZE) ? OTA_CHUNK_SIZE : left;
+    uint8_t  head[2];
+    uint8_t  sum_recv;
+    uint8_t  sum = 0;
+    uint32_t len;
 
-    if (otaReadChunk(uart_ch, buf, want) != want)
+    if (otaReadRaw(uart_ch, head, 2) != 2)
     {
-      uartPrintf(uart_ch, "err timeout\n");
-      otaAbort();
-      return false;
+      err = ERR_OTA_TIMEOUT;
+      break;
+    }
+    len = head[0] | (head[1] << 8);
+
+    if (len == 0 || len > OTA_CHUNK_MAX || len > left)
+    {
+      err = ERR_OTA_SIZE;
+      break;
     }
 
-    if (otaWrite(buf, want) == false)
+    if (otaReadRaw(uart_ch, buf, len) != len ||
+        otaReadRaw(uart_ch, &sum_recv, 1) != 1)
     {
-      uartPrintf(uart_ch, "err write\n");
-      otaAbort();
-      return false;
+      err = ERR_OTA_TIMEOUT;
+      break;
     }
 
-    left -= want;
+    for (uint32_t i = 0; i < len; i++) sum += buf[i];
+
+    if (sum != sum_recv)
+    {
+      /* 이 청크만 다시 받는다. 진행 위치는 그대로 둔다. */
+      uartFlush(uart_ch);
+      uartPrintf(uart_ch, "r\n");
+      continue;
+    }
+
+    err = otaWrite(buf, len);
+    if (err != OK) break;
+
+    left -= len;
     uartPrintf(uart_ch, "a\n");
   }
 
-  if (otaEnd(crc) == false)
+  if (err == OK) err = otaEnd(crc);
+
+  if (err != OK)
   {
-    uartPrintf(uart_ch, "err crc\n");
-    return false;
+    otaAbort();
+    uartPrintf(uart_ch, "e%04X\n", err);
+    return err;
   }
 
   uartPrintf(uart_ch, "ok\n");
-  return true;
+  return OK;
 }
 
-static uint32_t otaReadChunk(uint8_t uart_ch, uint8_t *p_buf, uint32_t length)
+static uint32_t otaReadRaw(uint8_t uart_ch, uint8_t *p_buf, uint32_t length)
 {
   uint32_t index = 0;
   uint32_t pre_time = millis();
@@ -337,20 +370,24 @@ void cliOta(cli_args_t *args)
     ret = true;
   }
 
-  if (args->argc == 3 && args->isStr(0, "write"))
+  if ((args->argc == 3 || args->argc == 4) && args->isStr(0, "write"))
   {
     uint32_t size = (uint32_t)args->getData(1);
     uint32_t crc  = (uint32_t)args->getData(2);
 
-    /* 지금 CLI 가 나온 채널로 그대로 받는다. USB 든 텔넷이든 BLE 든 같다. */
-    otaReceive(cliGetPort(), size, crc);
+    /* 채널을 주지 않으면 지금 CLI 가 나온 곳으로 받는다. USB 로 밀어 넣을 때가
+     * 그 경우다. BLE 는 제어와 대량 전송을 나누는 편이 낫다 — CLI 채널에는
+     * 에코가 흐르고 있어서 굵은 흐름이 끼면 서로 밀린다. */
+    uint8_t ch = (args->argc == 4) ? (uint8_t)(args->getData(3) - 1) : cliGetPort();
+
+    otaReceive(ch, size, crc);
     ret = true;
   }
 
   if (ret == false)
   {
     cliPrintf("ota info\n");
-    cliPrintf("ota write [size] [crc32]\n");
+    cliPrintf("ota write [size] [crc32] (ch)\n");
   }
 }
 #endif

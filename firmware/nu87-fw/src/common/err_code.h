@@ -31,4 +31,13 @@
 #define ERR_CMD_AUDIO_RATE            0x0030
 
 
+#define ERR_OTA_SIZE                  0x0040
+#define ERR_OTA_BEGIN                 0x0041
+#define ERR_OTA_TIMEOUT               0x0042
+#define ERR_OTA_CHECKSUM              0x0043
+#define ERR_OTA_FLASH_WRITE           0x0044
+#define ERR_OTA_CRC                   0x0045
+#define ERR_OTA_NOT_BEGIN             0x0046
+
+
 #endif 

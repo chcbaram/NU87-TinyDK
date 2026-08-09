@@ -22,24 +22,24 @@ typedef struct
 } ota_info_t;
 
 
-bool otaInit(void);
-bool otaGetInfo(ota_info_t *p_info);
+bool     otaInit(void);
+bool     otaGetInfo(ota_info_t *p_info);
 
 /* 받기 시작. 대상 슬롯을 정하고 진행 상태를 초기화한다. */
-bool otaBegin(uint32_t size);
+uint16_t otaBegin(uint32_t size);
 
 /* 이어서 쓴다. 섹터 경계에 닿으면 그때 지운다. */
-bool otaWrite(uint8_t *p_data, uint32_t length);
+uint16_t otaWrite(uint8_t *p_data, uint32_t length);
 
 /* 검증하고 부팅 슬롯을 바꾼다. crc 는 이미지 전체의 CRC32 다. */
-bool otaEnd(uint32_t crc);
+uint16_t otaEnd(uint32_t crc);
 
 /* 받다 만 것을 버린다. 부팅 슬롯은 건드리지 않는다. */
-bool otaAbort(void);
+bool     otaAbort(void);
 
 /* 한 채널에서 이미지 하나를 통째로 받는다. 전송이 무엇인지는 모른다 —
  * USB(LOGUART) / BLE 데이터 채널 / 향후 WiFi 가 모두 같은 uart 채널이다. */
-bool otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc);
+uint16_t otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc);
 
 #endif
 

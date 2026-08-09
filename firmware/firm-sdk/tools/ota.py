@@ -21,8 +21,9 @@ except ImportError:
     sys.exit("pyserial 이 필요하다: pip3 install pyserial")
 
 
-CHUNK = 1024          # 펌웨어의 OTA_CHUNK_SIZE 와 같아야 한다
+CHUNK = 1024          # 펌웨어의 OTA_CHUNK_MAX 이하여야 한다
 ACK_TIMEOUT = 10.0    # 섹터 지우기가 낀 청크는 느리다
+RESEND_MAX = 5
 
 
 class OtaError(Exception):
@@ -56,11 +57,18 @@ def wait_for(ser, expect, timeout=ACK_TIMEOUT):
     while time.time() < end:
         line = read_line(ser, timeout=max(0.1, end - time.time()))
         if line == expect:
-            return
-        if line.startswith("err"):
-            raise OtaError("보드: " + line)
+            return line
+        if line.startswith("e") and len(line) == 5:
+            raise OtaError(f"보드 오류 0x{line[1:]}")
+        if line == "r":
+            return line
 
     raise OtaError(f"'{expect}' 를 받지 못했다")
+
+
+def frame(data):
+    """len(2 LE) | data | sum(1). 링크에서 한 바이트가 밀려도 이 청크만 다시 보낸다."""
+    return len(data).to_bytes(2, "little") + data + bytes([sum(data) & 0xFF])
 
 
 def update(port, image, baud=115200):
@@ -89,10 +97,19 @@ def update(port, image, baud=115200):
     sent = 0
     started = time.time()
 
+    resend = 0
+
     while sent < len(payload):
         chunk = payload[sent:sent + CHUNK]
-        ser.write(chunk)
-        wait_for(ser, "a")
+        ser.write(frame(chunk))
+
+        if wait_for(ser, "a") == "r":
+            resend += 1
+            if resend > RESEND_MAX:
+                raise OtaError("같은 청크가 계속 깨진다")
+            continue
+
+        resend = 0
         sent += len(chunk)
 
         pct = sent * 100 // len(payload)
