@@ -27,14 +27,26 @@
 #define CONFIG_LWIP_LAYER           1
 #define CONFIG_INIT_NET             1   /* 부팅 시 lwIP 를 올린다 */
 #define CONFIG_ETHERNET             0   /* 유선 없음 */
-#define NET_IF_NUM                  1   /* wlan0 하나 */
 #else
 #define CONFIG_WLAN                 0
 #define CONFIG_LWIP_LAYER           0
 #define CONFIG_INIT_NET             0
 #define CONFIG_ETHERNET             0
-#define NET_IF_NUM                  0
 #endif
+
+/* NET_IF_NUM — 벤더 헤더 둘이 서로 다른 값을 계산한다.
+ *
+ *   api/lwip_netconf.h    (CONFIG_ETHERNET) + (CONFIG_WLAN)       = 1
+ *   wlan/include/autoconf.h  (CONFIG_ETHERNET) + (CONFIG_WLAN) + 1 = 2
+ *
+ * 어느 쪽이 이기는지는 include 순서가 정한다. 실제로는 2 다 — STA(wlan0) 와
+ * AP(wlan1) 자리를 함께 잡기 때문이고, 부팅 로그의
+ * "interface 0/1 is initialized" 가 그 결과다.
+ *
+ * 그래서 여기서 먼저 못박아 모든 파일이 같은 값을 보게 한다. autoconf.h 와
+ * 토큰까지 같아야 재정의 경고가 나지 않는다. xnetif[] 크기가 파일마다 달라지는
+ * 것을 막는 것이 목적이다. */
+#define NET_IF_NUM ((CONFIG_ETHERNET) + (CONFIG_WLAN) + 1)
 
 /* SDK 셸의 대화형 WiFi 명령. 우리 CLI 를 쓰므로 끈다. */
 #define CONFIG_INTERACTIVE_MODE     0

@@ -623,7 +623,11 @@ function frame(data) {
   return out;
 }
 
-/* 데이터 채널로 오는 한 줄을 기다린다. 보드가 보내는 말은 전부 한 줄이다. */
+/* 데이터 채널로 오는 한 줄을 기다린다. 보드가 보내는 말은 전부 한 줄이다.
+ *
+ * USB 는 선이 하나라 CLI 에코가 같은 곳으로 돌아온다. 첫 줄을 곧바로 응답으로
+ * 받으면 에코된 명령을 응답으로 착각한다. 그래서 기대하는 말이 나올 때까지
+ * 건너뛴다. BLE 는 채널이 따로라 해당이 없지만 같은 코드로 둔다. */
 function makeLineReader() {
   let buf = '';
   const lines = [];
@@ -641,13 +645,21 @@ function makeLineReader() {
     if (wake) { const w = wake; wake = null; w(); }
   });
 
-  return async (timeoutMs = 15000) => {
+  /* expect 가 나올 때까지 읽는다. 오류(e####)와 재전송 요청(r)은 바로 돌려준다. */
+  return async (expect, timeoutMs = 15000) => {
     const until = Date.now() + timeoutMs;
+
     while (Date.now() < until) {
-      if (lines.length) return lines.shift();
-      await new Promise((r) => { wake = r; setTimeout(r, 200); });
+      if (lines.length) {
+        const line = lines.shift();
+        if (line === expect) return line;
+        if (line === 'r')    return line;
+        if (/^e[0-9A-Fa-f]{4}$/.test(line)) throw new Error('보드 오류 0x' + line.slice(1));
+        continue;                       /* 에코 등 그 밖의 줄은 버린다 */
+      }
+      await new Promise((r) => { wake = r; setTimeout(r, 100); });
     }
-    throw new Error('보드가 응답하지 않는다');
+    throw new Error("'" + expect + "' 를 받지 못했다");
   };
 }
 
@@ -663,9 +675,7 @@ async function flashFirmware(file) {
     const ch = transport.dataChannel ? ' ' + transport.dataChannel : '';
 
     await transport.writeCli(enc.encode(`ota write ${payload.length} ${crc}${ch}\r`));
-
-    let line = await readLine();
-    if (line !== 'ready') throw new Error('보드: ' + line);
+    await readLine('ready', 20000);
 
     let sent = 0;
     let resend = 0;
@@ -675,12 +685,10 @@ async function flashFirmware(file) {
       const chunk = payload.slice(sent, sent + CHUNK);
       await transport.writeDat(frame(chunk));
 
-      line = await readLine();
-      if (line === 'r') {
+      if (await readLine('a') === 'r') {
         if (++resend > 5) throw new Error('같은 청크가 계속 깨진다');
         continue;
       }
-      if (line !== 'a') throw new Error('보드: ' + line);
 
       resend = 0;
       sent += chunk.length;
@@ -691,8 +699,7 @@ async function flashFirmware(file) {
       $('fwNote').textContent = `${pct}%  ${sent}/${payload.length} B  ${rate.toFixed(1)} KB/s`;
     }
 
-    line = await readLine(30000);
-    if (line !== 'ok') throw new Error('보드: ' + line);
+    await readLine('ok', 30000);
 
     $('fwNote').textContent = '전환 완료. 재부팅하면 새 펌웨어로 뜬다';
     say('업데이트 완료', 'ok');

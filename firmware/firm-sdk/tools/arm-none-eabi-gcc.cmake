@@ -134,6 +134,16 @@ set(NU87_VENDOR_RELAX_FLAGS
   #                           if(CpuId==1) / else if(CpuId==0) 로만 IPC_DEV 를 정하고
   #                           else 가 없다. KM4 에서 CpuId 는 항상 1 이라 실동작은 문제없다.
   -Wno-maybe-uninitialized
+
+  # 벤더 코드 전반에 깔린 잡음. 고칠 생각이 없는 종류만 끈다.
+  #   -Wunused-variable / -Wunused-but-set-variable   조건부 컴파일로 남은 지역변수
+  #   -Wpointer-sign                                  char* / unsigned char* 혼용
+  -Wno-unused-variable
+  -Wno-unused-but-set-variable
+  -Wno-pointer-sign
+
+  # ★ 전체를 -w 로 덮지 않는다. 매크로 재정의 같은 경고는 실제 버그를 드러낸다.
+  #   NET_IF_NUM 을 우리가 1 로 정의해 벤더의 2 와 어긋난 것을 이 경고로 찾았다.
 )
 
 # -Wreturn-mismatch 는 GCC 14 에서 신설된 이름이다.
