@@ -247,15 +247,22 @@
     </div>
 
     <div class="card">
-      <h2>업데이트</h2>
+      <h2>배포본</h2>
+      <ul class="aplist" id="fwList"><li><span class="name">불러오는 중…</span></li></ul>
+
+      <h2 style="margin-top:22px">직접 고르기</h2>
       <div class="row">
         <input type="file" id="fwFile" accept=".bin" style="flex:1;min-width:200px">
+      </div>
+
+      <h2 style="margin-top:22px">보내기</h2>
+      <div class="row">
         <button class="primary" id="btnFlash" disabled>보내기</button>
         <button id="btnStop" hidden>중지</button>
         <button class="primary" id="btnReboot" hidden>재부팅</button>
       </div>
       <div class="bar"><div id="fwBar"></div></div>
-      <p class="note" id="fwNote">km0_km4_image2.bin 을 고를 것.</p>
+      <p class="note" id="fwNote">배포본을 고르거나 파일을 직접 지정할 것.</p>
     </div>
   </section>
 </main>
@@ -296,6 +303,7 @@ const enc = new TextEncoder();
 
 let transport = null;    /* { name, writeCli, writeDat, onDat, close } */
 let stopFlash = false;
+let pending   = null;    /* 보낼 이미지 { name, bytes } */
 let rxBuf  = '';
 let waiter = null;
 
@@ -731,15 +739,89 @@ function readImage(bytes) {
   return info;
 }
 
-async function flashFirmware(file) {
-  const payload = new Uint8Array(await file.arrayBuffer());
+/* 고른 이미지를 검사해 보낼 준비를 한다. 로컬 파일이든 배포본이든 여기로 모인다. */
+function setPending(name, bytes) {
+  $('fwBar').style.width = '0';
+  $('fwNote').style.color = '';
+  $('btnReboot').hidden = true;
+
+  const img = readImage(bytes);
+
+  if (!img.name) {
+    $('fwNote').textContent = '이미지 형식이 아니다. km0_km4_image2.bin 인지 확인할 것';
+    $('fwNote').style.color = 'var(--err)';
+    $('btnFlash').disabled = true;
+    pending = null;
+    return;
+  }
+
+  const feat = [img.wifi ? 'WiFi' : null, img.ble ? 'BLE' : null]
+                 .filter(Boolean).join(' + ') || '무선 없음';
+
+  /* 지금 붙어 있는 통로가 새 이미지에 없으면 올리는 순간 못 돌아온다. */
+  const lost = transport && transport.name === 'BLE' && !img.ble;
+
+  $('fwNote').textContent =
+    `${img.name} · ${img.ver} · ${feat} · ${bytes.length} B` +
+    (lost ? '   ⚠ 이 이미지에는 BLE 가 없다. 올리면 다시 붙지 못하고 USB 로만 복구된다' : '');
+  if (lost) $('fwNote').style.color = 'var(--err)';
+
+  pending = { name, bytes };
+  $('btnFlash').disabled = !transport;
+}
+
+/* 배포본은 저장소에 함께 올려 Pages 가 서빙한다.
+ * 릴리스 자산은 쓸 수 없다 — release-assets.githubusercontent.com 이 CORS
+ * 헤더를 주지 않아 브라우저가 막는다. 이렇게 두면 같은 출처라 제약이 없다. */
+async function loadReleases() {
+  const ul = $('fwList');
+
+  try {
+    const res = await fetch('fw/manifest.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    const list = await res.json();
+
+    ul.innerHTML = '';
+    for (const it of list) {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      const meta = document.createElement('span');
+
+      name.className = 'name';
+      name.textContent = `${it.ver} · ${it.feat}`;
+      meta.className = 'meta';
+      meta.textContent = `${(it.size / 1024).toFixed(0)} KB  ${it.date}`;
+
+      li.append(name, meta);
+      li.addEventListener('click', async () => {
+        $('fwNote').textContent = '내려받는 중…';
+        try {
+          const bin = await fetch('fw/' + it.file, { cache: 'no-store' });
+          if (!bin.ok) throw new Error(bin.status);
+          setPending(it.file, new Uint8Array(await bin.arrayBuffer()));
+        } catch (e) {
+          $('fwNote').textContent = '내려받기 실패: ' + e.message;
+          $('fwNote').style.color = 'var(--err)';
+        }
+      });
+      ul.append(li);
+    }
+
+    if (!list.length) ul.innerHTML = '<li><span class="name">배포본이 없다</span></li>';
+  } catch (e) {
+    ul.innerHTML = '<li><span class="name">배포본 목록을 읽지 못했다</span></li>';
+  }
+}
+
+async function flashFirmware(item) {
+  const payload = item.bytes;
   const crc = crc32(payload);
 
   $('btnFlash').disabled = true;
   $('btnStop').hidden = false;
   $('btnReboot').hidden = true;
   stopFlash = false;
-  $('fwNote').textContent = `${file.name} · ${payload.length} B · crc32 0x${crc.toString(16).toUpperCase()}`;
+  $('fwNote').textContent = `${item.name} · ${payload.length} B · crc32 0x${crc.toString(16).toUpperCase()}`;
 
   try {
     const readLine = makeLineReader();
@@ -817,32 +899,9 @@ $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
 
 $('fwFile').addEventListener('change', async () => {
   const file = $('fwFile').files[0];
-  $('fwBar').style.width = '0';
-  $('fwNote').style.color = '';
+  if (!file) return;
 
-  if (!file) { $('fwNote').textContent = 'km0_km4_image2.bin 을 고를 것.'; return; }
-
-  const img = readImage(new Uint8Array(await file.arrayBuffer()));
-
-  if (!img.name) {
-    $('fwNote').textContent = '이미지 형식이 아니다. km0_km4_image2.bin 인지 확인할 것';
-    $('fwNote').style.color = 'var(--err)';
-    $('btnFlash').disabled = true;
-    return;
-  }
-
-  const feat = [img.wifi ? 'WiFi' : null, img.ble ? 'BLE' : null]
-                 .filter(Boolean).join(' + ') || '무선 없음';
-
-  /* 지금 붙어 있는 통로가 새 이미지에 없으면 올리는 순간 못 돌아온다. */
-  const lost = transport && transport.name === 'BLE' && !img.ble;
-
-  $('fwNote').textContent =
-    `${img.name} · ${img.ver} · ${feat} · ${file.size} B` +
-    (lost ? '   ⚠ 이 이미지에는 BLE 가 없다. 올리면 다시 붙지 못하고 USB 로만 복구된다' : '');
-  if (lost) $('fwNote').style.color = 'var(--err)';
-
-  $('btnFlash').disabled = !transport;
+  setPending(file.name, new Uint8Array(await file.arrayBuffer()));
 });
 
 $('btnReboot').addEventListener('click', async () => {
@@ -876,9 +935,8 @@ $('btnStop').addEventListener('click', () => {
 });
 
 $('btnFlash').addEventListener('click', () => {
-  const file = $('fwFile').files[0];
-  if (!file) { $('fwNote').textContent = '파일을 고를 것'; return; }
-  flashFirmware(file);
+  if (!pending) { $('fwNote').textContent = '먼저 이미지를 고를 것'; return; }
+  flashFirmware(pending);
 });
 
 /* 콘솔 높이 — 분리막을 끌어 조절한다. term 높이만 바꾸면 나머지는 따라온다.
@@ -963,6 +1021,8 @@ $('cmd').addEventListener('keydown', async (e) => {
 });
 
 /* 안드로이드 Chrome 에는 Web Serial 이 없다. 있는 것만 보여준다. */
+loadReleases();
+
 if (!navigator.serial)    $('btnUsb').hidden = true;
 if (!navigator.bluetooth) $('btnBle').hidden = true;
 

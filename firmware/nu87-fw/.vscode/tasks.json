@@ -281,6 +281,18 @@
       "problemMatcher": []
     },
     {
+      "label": "util - publish",
+      "type": "shell",
+      "detail": "빌드한 이미지를 설정 페이지의 배포본 목록에 올린다 (WiFi+BLE 구성만)",
+      "dependsOn": "build-build",
+      "windows": {
+        "command": "python ../firm-sdk/tools/publish.py --image build/km0_km4_image2.bin"
+      },
+      "command": "python3 ../firm-sdk/tools/publish.py --image build/km0_km4_image2.bin",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clear": true }
+    },
+    {
       "label": "util - pages",
       "type": "shell",
       "detail": "설정 페이지를 localhost:8000 으로 띄운다 (localhost 도 보안 컨텍스트라 Web Bluetooth 가 동작한다)",
