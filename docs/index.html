@@ -49,6 +49,8 @@
   button {
     font: inherit; padding: 8px 16px; border-radius: 7px; cursor: pointer;
     border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    /* flex/grid 안에서 줄어들면 "보내기" 가 두 줄로 접힌다 */
+    white-space: nowrap; flex: none;
   }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .45; cursor: default; }
@@ -78,7 +80,8 @@
     padding: 12px; height: 260px; overflow-y: auto; margin-bottom: 10px;
   }
   .cmdline { display: flex; gap: 8px; }
-  .cmdline input { font-family: var(--mono); }
+  /* min-width:0 이 없으면 input 의 기본 너비가 flex 축소를 막아 버튼을 밀어낸다 */
+  .cmdline input { font-family: var(--mono); flex: 1; min-width: 0; }
 
   .note { color: var(--dim); font-size: 13px; }
   .note code { font-family: var(--mono); font-size: 12px; }
