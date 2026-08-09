@@ -38,6 +38,10 @@
 #define NET_RETRY_DELAY_MS    10000
 #define NET_SYNC_PERIOD_MS    (12 * 60 * 60 * 1000UL)
 
+/* PC 에서 보드를 찾는 용도. tools/discover.py 가 이 포트로 브로드캐스트한다. */
+#define NET_DISCOVER_PORT     50000
+#define NET_DISCOVER_REQ      "NU87?"
+
 
 typedef struct
 {
@@ -50,6 +54,7 @@ typedef struct
 static bool       is_init  = false;
 static NetState_t state    = NET_STATE_IDLE;
 static uint32_t   sync_time = 0;
+static int        discover_sock = -1;
 static net_cfg_t  net_cfg =
 {
   .ssid    = "",
@@ -61,6 +66,7 @@ static void netThread(void *arg);
 static bool netCfgLoad(void);
 static bool netCfgSave(void);
 static bool netSntpQuery(const char *server, uint32_t *p_epoch);
+static void netDiscoverPoll(void);
 
 #ifdef _USE_HW_CLI
 static void cliNet(cli_args_t *args);
@@ -196,6 +202,7 @@ static void netThread(void *arg)
           sync_time = millis();       /* 실패해도 바로 다시 시도하지 않는다 */
           netSyncTime();
         }
+        netDiscoverPoll();
         break;
     }
 
@@ -263,6 +270,61 @@ static bool netSntpQuery(const char *server, uint32_t *p_epoch)
 
   close(sock);
   return ret;
+}
+
+
+/* PC 가 브로드캐스트로 "NU87?" 를 던지면 자기소개로 답한다.
+ * DHCP 로 IP 가 매번 바뀌어도 보드를 찾을 수 있게 하는 것이 목적이라
+ * 응답에 이름과 버전을 같이 실어 여러 대를 구분한다. */
+static void netDiscoverPoll(void)
+{
+  struct sockaddr_in from;
+  socklen_t from_len = sizeof(from);
+  char      buf[64];
+  int       rx_size;
+
+  if (discover_sock < 0)
+  {
+    struct sockaddr_in addr;
+
+    discover_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (discover_sock < 0) return;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port        = htons(NET_DISCOVER_PORT);
+
+    if (bind(discover_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+      close(discover_sock);
+      discover_sock = -1;
+      return;
+    }
+    lwip_fcntl(discover_sock, F_SETFL, O_NONBLOCK);
+  }
+
+  rx_size = recvfrom(discover_sock, buf, sizeof(buf) - 1, 0,
+                     (struct sockaddr *)&from, &from_len);
+  if (rx_size <= 0) return;
+
+  buf[rx_size] = 0;
+  if (strncmp(buf, NET_DISCOVER_REQ, strlen(NET_DISCOVER_REQ)) != 0) return;
+
+  {
+    char mac[32] = {0};
+    uint8_t ip[4] = {0};
+    int len;
+
+    wifiGetMac(mac, sizeof(mac));
+    wifiGetIp(ip);
+
+    len = snprintf(buf, sizeof(buf), "NU87 %s %s %s %d.%d.%d.%d",
+                   _DEF_BOARD_NAME, _DEF_FIRMWATRE_VERSION, mac,
+                   ip[0], ip[1], ip[2], ip[3]);
+
+    sendto(discover_sock, buf, len, 0, (struct sockaddr *)&from, from_len);
+  }
 }
 
 

@@ -39,6 +39,9 @@ typedef struct
 static const char *uart_name[UART_MAX_CH] =
 {
   "LOGUART  PA7/PA8",
+#ifdef _USE_HW_WIFI
+  "NET      telnet",
+#endif
 };
 
 static uart_tbl_t uart_tbl[UART_MAX_CH];
@@ -49,6 +52,7 @@ static uint8_t    rx_buf[UART_RX_BUF_LEN];
 
 
 static uint32_t uartLogIrq(void *data);
+static bool     uartIsHw(uint8_t ch);
 
 #ifdef _USE_HW_CLI
 static void cliUart(cli_args_t *args);
@@ -113,6 +117,8 @@ bool uartOpen(uint8_t ch, uint32_t baud)
     return uart_tbl[ch].is_open;
   }
 
+  if (uartIsHw(ch) == false) return false;
+
   /* KM0 부트로더가 LOGUART 를 115200 8N1 로 이미 설정해 둔다.
    * 플래싱 툴과 콘솔이 같은 포트를 공유하므로 보레이트를 바꾸지 않는다. */
   uart_tbl[ch].is_open = true;
@@ -147,6 +153,7 @@ uint32_t uartAvailable(uint8_t ch)
   {
     return uart_tbl[ch].p_driver->available();
   }
+  if (uartIsHw(ch) == false) return 0;
 
   return qbufferAvailable(&rx_q);
 }
@@ -159,6 +166,7 @@ bool uartFlush(uint8_t ch)
   {
     return uart_tbl[ch].p_driver->flush();
   }
+  if (uartIsHw(ch) == false) return false;
 
   qbufferFlush(&rx_q);
   return true;
@@ -172,6 +180,7 @@ uint8_t uartRead(uint8_t ch)
   {
     return uart_tbl[ch].p_driver->read();
   }
+  if (uartIsHw(ch) == false) return 0;
 
   uint8_t data = 0;
 
@@ -189,6 +198,7 @@ uint32_t uartWrite(uint8_t ch, uint8_t *p_data, uint32_t length)
   {
     return uart_tbl[ch].p_driver->write(p_data, length);
   }
+  if (uartIsHw(ch) == false) return 0;
 
   for (uint32_t i = 0; i < length; i++)
   {
@@ -232,6 +242,13 @@ uint32_t uartGetTxCnt(uint8_t ch)
 {
   if (ch >= UART_MAX_CH) return 0;
   return uart_tbl[ch].tx_cnt;
+}
+
+/* HW_UART_CH_LOG 만 실제 하드웨어다. 나머지는 드라이버를 등록해야 열린다.
+ * 이 구분이 없으면 드라이버가 아직 안 붙은 가상 채널로 쓴 것이 LOGUART 로 샌다. */
+bool uartIsHw(uint8_t ch)
+{
+  return (ch == HW_UART_CH_LOG);
 }
 
 /* ROM shell 핸들러와 같은 형태다. 처리 중에 IMR 을 내려 재진입을 막고,

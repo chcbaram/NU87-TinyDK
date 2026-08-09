@@ -23,7 +23,12 @@
 #define      HW_LED_MAX_CH          3
 
 #define _USE_HW_UART
+#ifdef _USE_HW_WIFI
+#define      HW_UART_MAX_CH         2
+#define      HW_UART_CH_NET         _DEF_UART2   /* 가상 채널. cli_net 이 소켓을 물린다 */
+#else
 #define      HW_UART_MAX_CH         1
+#endif
 #define      HW_UART_CH_LOG         _DEF_UART1
 #define      HW_UART_CH_CLI         HW_UART_CH_LOG
 
