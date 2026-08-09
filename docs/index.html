@@ -5,12 +5,13 @@
   보드에 붙어 CLI 를 그대로 몰고, 그 출력을 파싱해 보여준다. 펌웨어에 전용
   프로토콜을 두지 않은 이유는 CLI 가 이미 모든 것을 할 수 있기 때문이다.
 
-  통로가 둘이다. Web Bluetooth 와 Web Serial(USB). 붙고 나면 화면은 완전히
-  같으므로 탭이 아니라 헤더에 두었고, 아래 transport 하나만 갈아끼운다.
-  펌웨어가 uart_driver_t 로 같은 일을 한다.
+  통로는 Web Bluetooth 와 Web Serial(USB) 둘이다. 붙고 나면 화면은 완전히
+  같으므로 transport 하나만 갈아끼운다. 펌웨어가 uart_driver_t 로 같은 일을 한다.
 
-  화면은 위가 탭, 아래가 콘솔이다. 콘솔을 고정해 두면 무엇을 하든 보드가
-  뭐라고 답했는지 항상 보인다.
+  화면 규칙은 셋뿐이다.
+    면은 두 단계   바탕(--bg) > 카드(--panel) > 그 위 컨트롤(--bg)
+    패널 머리 하나 왼쪽은 탭, 오른쪽은 그 패널의 동작
+    연결 상태는 버튼 색이 아니라 보이는 컨트롤 자체로 나타낸다
 
   펌웨어 문서는 firmware/docs/ 에 있다. 이 폴더는 Pages 용이다.
 -->
@@ -42,8 +43,6 @@
   }
   * { box-sizing: border-box; }
 
-  /* 화면 높이를 꽉 쓰되 좌우로는 퍼지지 않게 한다. 넓은 모니터에서 헤더가
-   * 끝에서 끝까지 늘어나면 내용이 허공에 뜬 것처럼 보인다. */
   html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
@@ -52,90 +51,82 @@
   }
   .app {
     width: 100%; max-width: 900px; height: 100%;
-    display: flex; flex-direction: column;
-    background: var(--bg);
-    overflow: hidden;   /* 안쪽이 커져도 앱이 화면 밖으로 자라지 않게 */
+    display: flex; flex-direction: column; overflow: hidden;
   }
   @media (min-width: 900px) {
     .app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
   }
 
-  header {
-    display: flex; align-items: center; gap: 10px; flex: none;
-    padding: 11px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
-  }
+  /* ── 머리 ─────────────────────────────────────────────────────────── */
+  header { flex: none; padding: 12px 16px 10px; border-bottom: 1px solid var(--line);
+           background: var(--panel); }
+  .titlerow { display: flex; align-items: center; gap: 10px; }
   h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
-  h1 .sub { color: var(--dim); font-weight: 400; font-size: 14px; margin-left: 4px; }
+  h1 span { color: var(--dim); font-weight: 400; font-size: 14px; margin-left: 4px; }
   .grow { flex: 1; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
-  .dot.on { background: var(--ok); }
-  #via { color: var(--dim); font-size: 13px; margin-right: 6px; }
+
+  #summary { font-family: var(--mono); font-size: 12.5px; color: var(--dim);
+             margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .link { display: flex; align-items: center; gap: 8px; }
+  .link .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .link b { font-weight: 600; font-size: 13px; }
+  [hidden] { display: none !important; }
 
   button {
-    font: inherit; padding: 7px 13px; border-radius: 7px; cursor: pointer;
+    font: inherit; font-size: 14px; padding: 6px 13px; border-radius: 8px; cursor: pointer;
     border: 1px solid var(--line); background: var(--bg); color: var(--text);
-    /* flex/grid 안에서 줄어들면 글자가 두 줄로 접힌다 */
     white-space: nowrap; flex: none;
   }
+  button:hover:not(:disabled) { border-color: var(--dim); }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .45; cursor: default; }
-  button[hidden] { display: none; }
+  button:disabled { opacity: .4; cursor: default; }
 
-  /* 상태 카드 — 어느 탭에 있든 핵심은 항상 보인다. */
-  .status { flex: none; display: grid; gap: 10px; padding: 12px 14px 0;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
-  .stat {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 10px 13px;
-  }
-  .stat span { display: block; font-size: 11px; color: var(--dim); }
-  .stat b { font-family: var(--mono); font-size: 14px; font-weight: 500;
-            display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-  /* 위아래 패널이 같은 머리를 쓴다. 탭 + 오른쪽 동작 버튼. */
+  /* ── 패널 머리 — 위아래가 같은 틀을 쓴다 ──────────────────────────── */
   .panelhead { display: flex; align-items: flex-end; gap: 6px; flex: none;
                border-bottom: 1px solid var(--line); margin-bottom: 14px; }
-  .panelhead .act { margin-bottom: 6px; padding: 3px 10px; font-size: 13px; }
+  .panelhead .act { margin-bottom: 7px; padding: 3px 10px; font-size: 13px; }
 
-  .tabs { display: flex; gap: 4px; flex: none; }
+  .tabs { display: flex; gap: 2px; }
   .tabs button {
-    border: none; background: none; border-radius: 0;
-    font-size: 14px; line-height: 1.4; padding: 8px 14px;
+    border: none; background: none; border-radius: 0; padding: 8px 14px;
     color: var(--dim); display: flex; align-items: center; gap: 6px;
     border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
+  .tabs button:hover { color: var(--text); }
   .tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-  .badge { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+  .badge { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
   .badge.on { background: var(--ok); }
 
-  /* 탭 내용. 스크롤은 이 안에서 일어난다. */
-  main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 0; }
+  /* ── 본문 ─────────────────────────────────────────────────────────── */
+  main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px 0; }
   main > section { display: none; }
-  main > section.on { display: block; flex: 1; min-height: 0; overflow-y: auto;
-                      padding-bottom: 4px; }
-  .card {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px;
-  }
+  main > section.on { display: block; flex: 1; min-height: 0; overflow-y: auto; }
 
-  #msg { min-height: 22px; font-size: 13px; margin-bottom: 12px; }
-  #msg.err { color: var(--err); }
-  #msg.ok  { color: var(--ok); }
-
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0 0 18px; }
-  dt { color: var(--dim); font-size: 13px; }
-  dd { margin: 0; font-family: var(--mono); font-size: 13px; word-break: break-all; }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
+  .card > :last-child { margin-bottom: 0; }
 
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
        color: var(--dim); margin: 0 0 12px; font-weight: 600; }
 
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
+  dt { color: var(--dim); font-size: 13px; }
+  dd { margin: 0; font-family: var(--mono); font-size: 13px; word-break: break-all; }
+
   .row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .note { color: var(--dim); font-size: 13px; margin: 12px 0 0; }
+  .note code { font-family: var(--mono); font-size: 12px; }
+
+  #msg { min-height: 20px; font-size: 13px; margin-bottom: 10px; color: var(--dim); }
+  #msg.err { color: var(--err); }
+  #msg.ok  { color: var(--ok); }
 
   /* 최대 24개까지 나온다. 다 펼치면 아래 폼이 밀린다. */
-  .aplist { list-style: none; margin: 0 0 14px; padding: 0;
-            border: 1px solid var(--line); border-radius: 7px;
-            max-height: 200px; overflow-y: auto; background: var(--bg); }
-  .aplist li { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  .aplist { list-style: none; margin: 0; padding: 0; background: var(--bg);
+            border: 1px solid var(--line); border-radius: 8px;
+            max-height: 190px; overflow-y: auto; }
+  .aplist li { display: flex; align-items: center; gap: 10px; padding: 7px 12px;
                cursor: pointer; border-top: 1px solid var(--line); }
   .aplist li:first-child { border-top: none; }
   .aplist li:hover { background: var(--line); }
@@ -146,35 +137,33 @@
   form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
   label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
   input {
-    font: inherit; width: 100%; padding: 8px 10px; border-radius: 7px;
+    font: inherit; font-size: 14px; width: 100%; padding: 7px 10px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--bg); color: var(--text);
   }
   @media (max-width: 560px) { form { grid-template-columns: 1fr; } }
 
-  .note { color: var(--dim); font-size: 13px; }
-  .note code { font-family: var(--mono); font-size: 12px; }
-
-  .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden;
-         margin: 10px 0; }
+  .bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden;
+         border: 1px solid var(--line); margin: 12px 0 0; }
   .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
-  /* 내용과 콘솔 사이의 분리막. 끌어서 높이를 나눈다. */
-  .splitter {
-    flex: none; height: 7px; cursor: row-resize; background: var(--bg);
-    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-  }
-  .splitter:hover, .splitter.drag { background: var(--line); }
+  /* ── 콘솔 ─────────────────────────────────────────────────────────── */
+  /* 정하는 값은 term 높이 하나뿐이고 나머지는 따라온다. 바깥 높이를 따로 정하고
+   * 안에서 또 나누면 둘이 물려 계속 어긋난다. */
+  .splitter { flex: none; height: 12px; cursor: row-resize;
+              display: flex; align-items: center; justify-content: center; }
+  .splitter::after { content: ''; width: 38px; height: 3px; border-radius: 2px;
+                     background: var(--line); }
+  .splitter:hover::after, .splitter.drag::after { background: var(--dim); }
 
-  /* 콘솔 — 바닥 고정. 창이 낮으면 접어서 입력줄만 남긴다. */
-  footer { flex: none; display: flex; flex-direction: column;
-           background: var(--panel); padding: 8px 14px 10px; height: 200px; }
+  footer { flex: none; padding: 0 16px 16px; }
+  footer .card { margin-bottom: 0; padding: 12px 14px; }
+  footer .panelhead { margin-bottom: 10px; }
   #term {
     font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
-    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
     padding: 10px; height: 170px; overflow-y: auto; margin-bottom: 8px;
   }
   footer.fold #term { display: none; }
-  footer .panelhead { margin-bottom: 10px; }
   .cmdline { display: flex; gap: 8px; }
   .cmdline input { font-family: var(--mono); flex: 1; min-width: 0; }
 </style>
@@ -183,22 +172,23 @@
 <div class="app">
 
 <header>
-  <h1>NU87-TinyDK <span class="sub">개발보드</span></h1>
-  <span class="grow"></span>
-  <span class="dot" id="dot"></span>
-  <span id="via">연결 안 됨</span>
-  <button class="primary" id="btnBle">BLE 연결</button>
-  <button id="btnUsb">USB 연결</button>
-  <button id="btnDisconnect" disabled>해제</button>
-</header>
+  <div class="titlerow">
+    <h1>NU87-TinyDK <span>개발보드</span></h1>
+    <span class="grow"></span>
 
-<div class="status" id="status">
-  <div class="stat"><span>이름</span><b id="s-name">—</b></div>
-  <div class="stat"><span>펌웨어</span><b id="s-ver">—</b></div>
-  <div class="stat"><span>네트워크</span><b id="s-net">—</b></div>
-  <div class="stat"><span>IP</span><b id="s-ip">—</b></div>
-  <div class="stat"><span>실행 슬롯</span><b id="s-slot">—</b></div>
-</div>
+    <span id="connectGroup">
+      <button id="btnBle">BLE 연결</button>
+      <button id="btnUsb">USB 연결</button>
+    </span>
+
+    <span class="link" id="linkGroup" hidden>
+      <span class="dot"></span>
+      <b id="linkName"></b>
+      <button id="btnDisconnect">해제</button>
+    </span>
+  </div>
+  <div id="summary">연결되지 않았다</div>
+</header>
 
 <main>
   <div class="panelhead">
@@ -215,7 +205,7 @@
     <div id="msg"></div>
     <div class="card">
       <h2>상세</h2>
-      <dl id="info" style="margin-bottom:0"><dt>상태</dt><dd>—</dd></dl>
+      <dl id="info"><dt>상태</dt><dd>—</dd></dl>
     </div>
   </section>
 
@@ -224,7 +214,7 @@
       <h2>주변 검색</h2>
       <div class="row">
         <button id="btnScan" disabled>검색</button>
-        <span class="note" id="scanNote"></span>
+        <span class="note" style="margin:0" id="scanNote"></span>
       </div>
       <ul class="aplist" id="aplist" hidden></ul>
     </div>
@@ -232,17 +222,17 @@
     <div class="card">
       <h2>접속</h2>
       <form id="wifiForm">
-      <div>
-        <label for="ssid">SSID</label>
-        <input id="ssid" autocomplete="off" spellcheck="false" placeholder="공유기 이름">
-      </div>
-      <div>
-        <label for="pass">비밀번호</label>
-        <input id="pass" type="password" autocomplete="off" placeholder="없으면 비워 둔다">
-      </div>
+        <div>
+          <label for="ssid">SSID</label>
+          <input id="ssid" autocomplete="off" spellcheck="false" placeholder="공유기 이름">
+        </div>
+        <div>
+          <label for="pass">비밀번호</label>
+          <input id="pass" type="password" autocomplete="off" placeholder="없으면 비워 둔다">
+        </div>
         <button class="primary" id="btnWifi" disabled>접속</button>
       </form>
-      <p class="note" style="margin-bottom:0">저장 후 다음 부팅부터 자동으로 붙는다. <code>nvs</code> 에 남는다.</p>
+      <p class="note">저장 후 다음 부팅부터 자동으로 붙는다. <code>nvs</code> 에 남는다.</p>
     </div>
   </section>
 
@@ -250,7 +240,7 @@
     <div class="card">
       <h2>슬롯</h2>
       <dl id="otaInfo"><dt>실행 중</dt><dd>—</dd></dl>
-      <p class="note" style="margin-bottom:0">
+      <p class="note">
         쓰기는 지금 실행 중이 아닌 슬롯으로 간다. 실패해도 지금 펌웨어가 그대로
         남아 보드가 죽지 않는다. 다 받고 검증된 뒤에야 부팅 슬롯이 바뀐다.
       </p>
@@ -263,7 +253,7 @@
         <button class="primary" id="btnFlash" disabled>보내기</button>
       </div>
       <div class="bar"><div id="fwBar"></div></div>
-      <p class="note" id="fwNote" style="margin-bottom:0">km0_km4_image2.bin 을 고를 것.</p>
+      <p class="note" id="fwNote">km0_km4_image2.bin 을 고를 것.</p>
     </div>
   </section>
 </main>
@@ -272,19 +262,17 @@
 
 <footer id="console">
   <div class="card">
-  <div class="panelhead">
-    <nav class="tabs">
-      <button class="on">콘솔</button>
-    </nav>
-    <span class="grow"></span>
-    <button class="act" id="btnFold">접기</button>
-    <button class="act" id="btnClear">지우기</button>
-  </div>
-  <div id="term"></div>
-  <div class="cmdline">
-    <input id="cmd" placeholder="help" autocomplete="off" spellcheck="false" disabled>
-    <button id="btnSend" disabled>보내기</button>
-  </div>
+    <div class="panelhead">
+      <nav class="tabs"><button class="on">콘솔</button></nav>
+      <span class="grow"></span>
+      <button class="act" id="btnFold">접기</button>
+      <button class="act" id="btnClear">지우기</button>
+    </div>
+    <div id="term"></div>
+    <div class="cmdline">
+      <input id="cmd" placeholder="help" autocomplete="off" spellcheck="false" disabled>
+      <button id="btnSend" disabled>보내기</button>
+    </div>
   </div>
 </footer>
 
@@ -328,14 +316,17 @@ function termWrite(text) {
   el.scrollTop = el.scrollHeight;
 }
 
+/* 연결 여부는 버튼 색이 아니라 보이는 컨트롤 자체로 나타낸다.
+ * 색만 다르게 하면 "강조된 버튼 = 지금 그걸로 붙어 있다" 로 읽힌다. */
 function setConnected(on, via) {
-  $('dot').classList.toggle('on', on);
-  $('via').textContent = on ? (via || '') : '';
-  $('btnBle').disabled = on;
-  $('btnUsb').disabled = on;
-  for (const id of ['btnDisconnect', 'btnWifi', 'btnScan', 'btnSend',
-                    'btnRefresh', 'btnFlash', 'cmd'])
+  $('connectGroup').hidden = on;
+  $('linkGroup').hidden = !on;
+  $('linkName').textContent = via || '';
+
+  for (const id of ['btnWifi', 'btnScan', 'btnSend', 'btnRefresh', 'btnFlash', 'cmd'])
     $(id).disabled = !on;
+
+  if (!on) $('summary').textContent = '연결되지 않았다';
 }
 
 
@@ -527,11 +518,12 @@ async function refresh() {
       ['슬롯 크기', ota['크기'] || '—'],
     ]);
 
-    $('s-name').textContent = ble.name  || '—';
-    $('s-ver').textContent  = ota.ver   || '—';
-    $('s-net').textContent  = net.state || '—';
-    $('s-ip').textContent   = net.ip    || '—';
-    $('s-slot').textContent = (ota['실행'] || '—').split(' ')[0];
+    $('summary').textContent = [
+      ble.name || '—',
+      ota.ver  || '—',
+      net.state === 'ONLINE' ? ('ONLINE ' + (net.ip || '')) : (net.state || '—'),
+      (ota['실행'] || '').split(' ')[0],
+    ].filter(Boolean).join('  ·  ');
 
     $('badgeNet').classList.toggle('on', net.state === 'ONLINE');
     if (net.ssid && net.ssid !== '(없음)') $('ssid').value = net.ssid;
