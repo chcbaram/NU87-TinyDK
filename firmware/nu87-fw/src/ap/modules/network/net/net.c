@@ -18,8 +18,6 @@
 #ifdef _USE_HW_WIFI
 #include "cli.h"
 
-#include <time.h>
-
 #include "lwip/sockets.h"
 #include "lwip/netdb.h"
 #include "lwip/inet.h"
@@ -46,7 +44,6 @@ typedef struct
   char     ssid[NET_SSID_MAX];
   char     pass[NET_PASS_MAX];
   uint8_t  is_auto;
-  int16_t  tz_min;              /* UTC 로부터의 분. 표시에만 쓴다 */
 } net_cfg_t;
 
 
@@ -58,7 +55,6 @@ static net_cfg_t  net_cfg =
   .ssid    = "",
   .pass    = "",
   .is_auto = 1,
-  .tz_min  = 9 * 60,
 };
 
 static void netThread(void *arg);
@@ -279,8 +275,7 @@ void cliNet(cli_args_t *args)
   if (args->argc == 1 && args->isStr(0, "info"))
   {
     const char *state_str[] = { "IDLE", "CONNECTING", "DHCP", "ONLINE" };
-    time_t      local = (time_t)(rtcGetEpochTime() + net_cfg.tz_min * 60);
-    struct tm  *p_tm  = gmtime(&local);
+    rtc_info_t  info;
     uint8_t     ip[4] = {0};
     char        mac[32] = {0};
 
@@ -292,10 +287,11 @@ void cliNet(cli_args_t *args)
     if (wifiGetIp(ip))                cliPrintf("ip    : %d.%d.%d.%d\n",
                                                 ip[0], ip[1], ip[2], ip[3]);
 
-    cliPrintf("time  : %04d-%02d-%02d %02d:%02d:%02d UTC%+d  (%s)\n",
-              p_tm->tm_year + 1900, p_tm->tm_mon + 1, p_tm->tm_mday,
-              p_tm->tm_hour, p_tm->tm_min, p_tm->tm_sec,
-              net_cfg.tz_min / 60, rtcIsTimeSet() ? "동기됨" : "미설정");
+    rtcGetInfo(&info);
+    cliPrintf("time  : 20%02d-%02d-%02d %02d:%02d:%02d UTC%+d  (%s)\n",
+              info.date.year, info.date.month, info.date.day,
+              info.time.hours, info.time.minutes, info.time.seconds,
+              rtcGetTimeZone() / 60, rtcIsTimeSet() ? "동기됨" : "미설정");
     ret = true;
   }
 
@@ -330,14 +326,6 @@ void cliNet(cli_args_t *args)
     ret = true;
   }
 
-  if (args->argc == 2 && args->isStr(0, "tz"))
-  {
-    net_cfg.tz_min = (int16_t)(args->getData(1) * 60);
-    cliPrintf("net tz UTC%+d : %s\n", net_cfg.tz_min / 60,
-              netCfgSave() ? "OK" : "Fail");
-    ret = true;
-  }
-
   if (ret == false)
   {
     cliPrintf("net info\n");
@@ -345,7 +333,6 @@ void cliNet(cli_args_t *args)
     cliPrintf("net disconnect\n");
     cliPrintf("net sync\n");
     cliPrintf("net auto on|off\n");
-    cliPrintf("net tz [hour]\n");
   }
 }
 #endif

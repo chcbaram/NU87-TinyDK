@@ -20,6 +20,7 @@ bool wifiDisconnect(void);
 bool wifiGetMac(char *p_str, uint32_t length);
 bool wifiGetIp(uint8_t *p_ip);
 bool wifiDhcpStart(void);
+bool wifiSetLogEnable(bool enable);
 
 #endif
 

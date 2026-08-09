@@ -23,8 +23,12 @@
 /* REG0/6/7 은 시스템 몫이고 REG2 는 생산 테스트가 쓴다. REG1 은 문서상 사용자
  * 영역이지만 실측하면 소프트 리셋마다 0 으로 지워진다(REG3~5 는 유지된다). */
 #define RTC_BKUP_BASE       BKUP_REG3        /* 기준 자정의 epoch. 0 이면 시각 미설정 */
-#define RTC_BKUP_USER       BKUP_REG4        /* 여기부터 rtcSetReg/rtcGetReg 몫 */
-#define RTC_BKUP_USER_MAX   2                /* REG4 ~ REG5 */
+#define RTC_BKUP_TZ         BKUP_REG4        /* 시간대. 부팅 직후부터 필요해서 여기 둔다 */
+#define RTC_BKUP_USER       BKUP_REG5        /* 여기부터 rtcSetReg/rtcGetReg 몫 */
+#define RTC_BKUP_USER_MAX   1                /* REG5 */
+
+#define RTC_TZ_MAGIC        0x545A0000UL     /* 상위 16비트로 설정 여부를 구분한다 */
+#define RTC_TZ_DEFAULT      (9 * 60)         /* KST */
 
 #define RTC_REBASE_DAYS     400              /* Days 는 9비트라 511 이 한계다 */
 
@@ -70,7 +74,7 @@ bool rtcInit(void)
 
 bool rtcGetInfo(rtc_info_t *rtc_info)
 {
-  time_t     now = (time_t)rtcGetEpochTime();
+  time_t     now  = (time_t)((int32_t)rtcGetEpochTime() + rtcGetTimeZone() * 60);
   struct tm *p_tm = gmtime(&now);
 
   if (p_tm == NULL) return false;
@@ -129,12 +133,29 @@ bool rtcSetDate(rtc_date_t *rtc_date)
 
 bool rtcSetInfo(rtc_info_t *rtc_info)
 {
-  return rtcSetEpochTime(rtcCivilToEpoch(2000 + rtc_info->date.year,
-                                         rtc_info->date.month,
-                                         rtc_info->date.day,
-                                         rtc_info->time.hours,
-                                         rtc_info->time.minutes,
-                                         rtc_info->time.seconds));
+  uint32_t local = rtcCivilToEpoch(2000 + rtc_info->date.year,
+                                   rtc_info->date.month,
+                                   rtc_info->date.day,
+                                   rtc_info->time.hours,
+                                   rtc_info->time.minutes,
+                                   rtc_info->time.seconds);
+
+  return rtcSetEpochTime((uint32_t)((int32_t)local - rtcGetTimeZone() * 60));
+}
+
+int16_t rtcGetTimeZone(void)
+{
+  uint32_t data = BKUP_Read(RTC_BKUP_TZ);
+
+  if ((data & 0xFFFF0000UL) != RTC_TZ_MAGIC) return RTC_TZ_DEFAULT;
+
+  return (int16_t)(data & 0xFFFFUL);
+}
+
+bool rtcSetTimeZone(int16_t offset_min)
+{
+  BKUP_Write(RTC_BKUP_TZ, RTC_TZ_MAGIC | (uint16_t)offset_min);
+  return true;
 }
 
 uint32_t rtcGetEpochTime(void)
@@ -236,10 +257,18 @@ void cliRtc(cli_args_t *args)
     rtcGetInfo(&info);
     cliPrintf("init  : %s\n", is_init ? "True" : "False");
     cliPrintf("set   : %s\n", rtcIsTimeSet() ? "True" : "False");
-    cliPrintf("epoch : %u\n", (unsigned int)rtcGetEpochTime());
-    cliPrintf("time  : 20%02d-%02d-%02d %02d:%02d:%02d (UTC)\n",
+    cliPrintf("epoch : %u (UTC)\n", (unsigned int)rtcGetEpochTime());
+    cliPrintf("tz    : UTC%+d\n", rtcGetTimeZone() / 60);
+    cliPrintf("time  : 20%02d-%02d-%02d %02d:%02d:%02d\n",
               info.date.year, info.date.month, info.date.day,
               info.time.hours, info.time.minutes, info.time.seconds);
+    ret = true;
+  }
+
+  if (args->argc == 2 && args->isStr(0, "tz"))
+  {
+    cliPrintf("rtc tz UTC%+d : %s\n", (int)args->getData(1),
+              rtcSetTimeZone((int16_t)(args->getData(1) * 60)) ? "OK" : "Fail");
     ret = true;
   }
 
@@ -293,6 +322,7 @@ void cliRtc(cli_args_t *args)
   {
     cliPrintf("rtc info\n");
     cliPrintf("rtc get info\n");
+    cliPrintf("rtc tz [hour]\n");
     cliPrintf("rtc set time [h] [m] [s]\n");
     cliPrintf("rtc set date [y] [m] [d]\n");
     cliPrintf("rtc set epoch [sec]\n");

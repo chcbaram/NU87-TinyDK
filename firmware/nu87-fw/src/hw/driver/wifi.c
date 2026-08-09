@@ -14,6 +14,7 @@
 #include "wifi_conf.h"
 #include "lwip_netconf.h"
 #include "lwip/netif.h"
+#include "rtw_debug.h"
 
 extern struct netif xnetif[NET_IF_NUM];
 
@@ -52,6 +53,8 @@ static void cliWifi(cli_args_t *args);
 bool wifiInit(void)
 {
   LwIP_Init();
+
+  wifiSetLogEnable(true);
 
   is_init = true;
 
@@ -139,6 +142,18 @@ bool wifiGetMac(char *p_str, uint32_t length)
   wifi_get_mac_address(mac);
   strncpy(p_str, mac, length - 1);
   p_str[length - 1] = 0;
+  return true;
+}
+
+/* 벤더 드라이버 로그. 기본은 켜 둔다.
+ *
+ * 줄마다 빈 줄이 끼는데 lib_wlan.a 안의 _dbgdump_nr 이
+ *   printf("\n\r"); printf(...)
+ * 라 메시지 앞에 개행을 하나 더 찍기 때문이다. 메시지 문자열도 개행으로
+ * 끝나서 둘이 겹친다. 이미 컴파일된 매크로라 형식은 못 고친다. */
+bool wifiSetLogEnable(bool enable)
+{
+  GlobalDebugEnable = enable ? 1 : 0;
   return true;
 }
 
@@ -231,6 +246,15 @@ void cliWifi(cli_args_t *args)
     ret = true;
   }
 
+  if (args->argc == 2 && args->isStr(0, "log"))
+  {
+    bool enable = args->isStr(1, "on");
+
+    wifiSetLogEnable(enable);
+    cliPrintf("wifi log %s\n", enable ? "on" : "off");
+    ret = true;
+  }
+
   if (args->argc == 1 && args->isStr(0, "scan"))
   {
     if (wifiOn())
@@ -284,6 +308,7 @@ void cliWifi(cli_args_t *args)
     cliPrintf("wifi off\n");
     cliPrintf("wifi scan\n");
     cliPrintf("wifi connect ssid [pass]\n");
+    cliPrintf("wifi log on|off\n");
   }
 }
 #endif
