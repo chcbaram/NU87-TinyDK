@@ -92,8 +92,12 @@
   .stat b { font-family: var(--mono); font-size: 14px; font-weight: 500;
             display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .tabs { display: flex; gap: 4px; flex: none;
-          border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  /* 위아래 패널이 같은 머리를 쓴다. 탭 + 오른쪽 동작 버튼. */
+  .panelhead { display: flex; align-items: flex-end; gap: 6px; flex: none;
+               border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .panelhead .act { margin-bottom: 6px; padding: 3px 10px; font-size: 13px; }
+
+  .tabs { display: flex; gap: 4px; flex: none; }
   .tabs button {
     border: none; background: none; border-radius: 0;
     font-size: 14px; line-height: 1.4; padding: 8px 14px;
@@ -164,15 +168,13 @@
   /* 콘솔 — 바닥 고정. 창이 낮으면 접어서 입력줄만 남긴다. */
   footer { flex: none; display: flex; flex-direction: column;
            background: var(--panel); padding: 8px 14px 10px; height: 200px; }
-  .termbar { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-  .termbar h2 { margin: 0; flex: 1; }
-  .termbar button { padding: 4px 10px; font-size: 13px; }
   #term {
     font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
     background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
     padding: 10px; flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 8px;
   }
   footer.fold #term { display: none; }
+  footer .panelhead { margin-bottom: 10px; }
   .cmdline { display: flex; gap: 8px; }
   .cmdline input { font-family: var(--mono); flex: 1; min-width: 0; }
 </style>
@@ -199,18 +201,21 @@
 </div>
 
 <main>
-  <nav class="tabs">
-    <button class="on" data-tab="board">보드</button>
-    <button data-tab="wifi">WiFi <span class="badge" id="badgeNet"></span></button>
-    <button data-tab="fw">펌웨어</button>
-  </nav>
+  <div class="panelhead">
+    <nav class="tabs">
+      <button class="on" data-tab="board">보드</button>
+      <button data-tab="wifi">WiFi <span class="badge" id="badgeNet"></span></button>
+      <button data-tab="fw">펌웨어</button>
+    </nav>
+    <span class="grow"></span>
+    <button class="act" id="btnRefresh" disabled>갱신</button>
+  </div>
 
   <section id="tab-board" class="on">
     <div id="msg"></div>
     <div class="card">
       <h2>상세</h2>
-      <dl id="info"><dt>상태</dt><dd>—</dd></dl>
-      <button id="btnRefresh" disabled>갱신</button>
+      <dl id="info" style="margin-bottom:0"><dt>상태</dt><dd>—</dd></dl>
     </div>
   </section>
 
@@ -267,10 +272,13 @@
 
 <footer id="console">
   <div class="card">
-  <div class="termbar">
-    <h2>콘솔</h2>
-    <button id="btnFold">접기</button>
-    <button id="btnClear">지우기</button>
+  <div class="panelhead">
+    <nav class="tabs">
+      <button class="on">콘솔</button>
+    </nav>
+    <span class="grow"></span>
+    <button class="act" id="btnFold">접기</button>
+    <button class="act" id="btnClear">지우기</button>
   </div>
   <div id="term"></div>
   <div class="cmdline">
