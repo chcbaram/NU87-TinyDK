@@ -37,6 +37,10 @@ bool otaEnd(uint32_t crc);
 /* 받다 만 것을 버린다. 부팅 슬롯은 건드리지 않는다. */
 bool otaAbort(void);
 
+/* 한 채널에서 이미지 하나를 통째로 받는다. 전송이 무엇인지는 모른다 —
+ * USB(LOGUART) / BLE 데이터 채널 / 향후 WiFi 가 모두 같은 uart 채널이다. */
+bool otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc);
+
 #endif
 
 #ifdef __cplusplus

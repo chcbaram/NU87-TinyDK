@@ -25,7 +25,7 @@
 
 #ifdef _USE_HW_OTA
 #include "cli.h"
-#include "reset.h"
+#include "uart.h"
 
 
 #define OTA_SLOT_ADDR_1       0x00006000        /* 물리 0x08006000 */
@@ -41,6 +41,11 @@
 /* 시그니처를 보류해 두는 동안 쓰는 값. 지운 직후 상태 그대로다. */
 #define OTA_SIG_BLANK         0xFF
 
+/* 청크마다 ack 를 돌려 호스트를 재운다. 이게 없으면 보내는 쪽이 쏟아부어
+ * 수신 큐가 넘친다. BLE 채널 큐가 2KB 라 그보다 작아야 한다. */
+#define OTA_CHUNK_SIZE        1024
+#define OTA_RX_TIMEOUT_MS     5000
+
 
 static bool       is_init = false;
 static ota_info_t info;
@@ -49,6 +54,7 @@ static uint8_t    sig_hold[OTA_SIG_LEN];
 static uint32_t   erased_upto;      /* 이 오프셋 앞까지는 지워 두었다 */
 
 static uint8_t  otaGetRunSlot(void);
+static uint32_t otaReadChunk(uint8_t uart_ch, uint8_t *p_buf, uint32_t length);
 static uint32_t otaSlotAddr(uint8_t slot);
 static bool     otaEraseUpto(uint32_t offset);
 static uint32_t otaCrc32(uint32_t addr, uint32_t length);
@@ -185,6 +191,81 @@ bool otaAbort(void)
  * SDK 의 ota_get_cur_index() 와 같은 계산이지만 직접 한다. 그 함수가 있는
  * misc/rtl8721d_ota.c 는 lwIP 와 FatFs 를 include 해서, 레지스터 두 개
  * 읽자고 네트워크 스택 전체를 끌어오게 된다. */
+/* 이미지 하나를 통째로 받는다. 주고받는 말은 이게 전부다.
+ *
+ *   보드 -> ready       준비됐다. 지금부터 원시 바이트다
+ *   호스트 -> 청크
+ *   보드 -> a           한 청크 받았다. 다음을 보내라
+ *   보드 -> ok / err    끝
+ */
+bool otaReceive(uint8_t uart_ch, uint32_t size, uint32_t crc)
+{
+  static uint8_t buf[OTA_CHUNK_SIZE];
+  uint32_t left = size;
+
+  if (otaBegin(size) == false)
+  {
+    uartPrintf(uart_ch, "err begin\n");
+    return false;
+  }
+
+  uartFlush(uart_ch);
+  uartPrintf(uart_ch, "ready\n");
+
+  while (left > 0)
+  {
+    uint32_t want = (left > OTA_CHUNK_SIZE) ? OTA_CHUNK_SIZE : left;
+
+    if (otaReadChunk(uart_ch, buf, want) != want)
+    {
+      uartPrintf(uart_ch, "err timeout\n");
+      otaAbort();
+      return false;
+    }
+
+    if (otaWrite(buf, want) == false)
+    {
+      uartPrintf(uart_ch, "err write\n");
+      otaAbort();
+      return false;
+    }
+
+    left -= want;
+    uartPrintf(uart_ch, "a\n");
+  }
+
+  if (otaEnd(crc) == false)
+  {
+    uartPrintf(uart_ch, "err crc\n");
+    return false;
+  }
+
+  uartPrintf(uart_ch, "ok\n");
+  return true;
+}
+
+static uint32_t otaReadChunk(uint8_t uart_ch, uint8_t *p_buf, uint32_t length)
+{
+  uint32_t index = 0;
+  uint32_t pre_time = millis();
+
+  while (index < length)
+  {
+    if (uartAvailable(uart_ch) > 0)
+    {
+      p_buf[index++] = uartRead(uart_ch);
+      pre_time = millis();
+      continue;
+    }
+
+    if (millis() - pre_time >= OTA_RX_TIMEOUT_MS) break;
+
+    delay(1);
+  }
+
+  return index;
+}
+
 static uint8_t otaGetRunSlot(void)
 {
   RSIP_REG_TypeDef *RSIP = ((RSIP_REG_TypeDef *)RSIP_REG_BASE);
@@ -256,9 +337,20 @@ void cliOta(cli_args_t *args)
     ret = true;
   }
 
+  if (args->argc == 3 && args->isStr(0, "write"))
+  {
+    uint32_t size = (uint32_t)args->getData(1);
+    uint32_t crc  = (uint32_t)args->getData(2);
+
+    /* 지금 CLI 가 나온 채널로 그대로 받는다. USB 든 텔넷이든 BLE 든 같다. */
+    otaReceive(cliGetPort(), size, crc);
+    ret = true;
+  }
+
   if (ret == false)
   {
     cliPrintf("ota info\n");
+    cliPrintf("ota write [size] [crc32]\n");
   }
 }
 #endif

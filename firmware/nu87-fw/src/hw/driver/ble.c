@@ -58,7 +58,7 @@
 #define BLE_FTL_ADDR            0x003F8000
 #define BLE_FTL_PAGES           3
 
-#define BLE_RX_BUF_LEN          512
+#define BLE_RX_BUF_LEN          2048
 #define BLE_SEND_CHUNK          20
 #define BLE_SEND_RETRY          200
 #define BLE_SEND_RETRY_MS       5

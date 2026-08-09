@@ -85,8 +85,10 @@
 
   .scanbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 
+  /* 최대 24개까지 나온다. 다 펼치면 아래 폼이 화면 밖으로 밀린다. */
   .aplist { list-style: none; margin: 0 0 14px; padding: 0;
-            border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+            border: 1px solid var(--line); border-radius: 7px;
+            max-height: 220px; overflow-y: auto; }
   .aplist li { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
                cursor: pointer; border-top: 1px solid var(--line); }
   .aplist li:first-child { border-top: none; }
