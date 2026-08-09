@@ -715,10 +715,12 @@ async function flashFirmware(file) {
 
 /* ── 붙이기 ────────────────────────────────────────────────────────── */
 
-for (const btn of document.querySelectorAll('.tabs button')) {
+/* 본문 탭만 고른다. 콘솔의 탭 버튼은 data-tab 이 없어 여기 걸리면 예외가 나고
+ * 그 전에 모든 .on 을 지워 본문이 통째로 사라진다. */
+for (const btn of document.querySelectorAll('main .tabs button')) {
   btn.addEventListener('click', () => {
-    for (const b of document.querySelectorAll('.tabs button')) b.classList.remove('on');
-    for (const s of document.querySelectorAll('main > section')) s.classList.remove('on');
+    for (const b of document.querySelectorAll('main .tabs button')) b.classList.remove('on');
+    for (const sec of document.querySelectorAll('main > section')) sec.classList.remove('on');
     btn.classList.add('on');
     $('tab-' + btn.dataset.tab).classList.add('on');
   });
@@ -730,6 +732,12 @@ $('btnDisconnect').addEventListener('click', disconnect);
 $('btnRefresh').addEventListener('click', refresh);
 $('btnScan').addEventListener('click', scan);
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
+
+$('btnFlash').addEventListener('click', () => {
+  const file = $('fwFile').files[0];
+  if (!file) { $('fwNote').textContent = '파일을 고를 것'; return; }
+  flashFirmware(file);
+});
 
 /* 콘솔 높이 — 분리막을 끌어 조절한다. term 높이만 바꾸면 나머지는 따라온다.
  * 시작점 대비 이동량으로 계산한다. 절대 좌표로 하면 여백을 하나라도 빠뜨렸을 때
