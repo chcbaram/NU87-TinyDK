@@ -234,6 +234,7 @@
 <div class="splitter" id="splitter" title="끌어서 높이 조절"></div>
 
 <footer id="console">
+  <div class="card">
   <div class="termbar">
     <h2>콘솔</h2>
     <button id="btnFold">접기</button>
@@ -243,6 +244,7 @@
   <div class="cmdline">
     <input id="cmd" placeholder="help" autocomplete="off" spellcheck="false" disabled>
     <button id="btnSend" disabled>보내기</button>
+  </div>
   </div>
 </footer>
 
@@ -684,7 +686,7 @@ $('btnScan').addEventListener('click', scan);
 $('btnClear').addEventListener('click', () => { $('term').textContent = ''; });
 
 /* 콘솔 높이 — 분리막을 끌어 나눈다. 다음에 열 때도 그 높이를 쓴다. */
-const CONSOLE_MIN = 92;      /* 제목줄 + 입력줄만 남는 높이 */
+const CONSOLE_MIN = 108;     /* 제목줄 + 입력줄만 남는 높이 */
 
 function setConsoleHeight(px) {
   const app = document.querySelector('.app').getBoundingClientRect();
@@ -697,11 +699,11 @@ function setConsoleHeight(px) {
   localStorage.setItem('consoleHeight', h);
 }
 
-setConsoleHeight(+localStorage.getItem('consoleHeight') || 200);
+setConsoleHeight(+localStorage.getItem('consoleHeight') || 220);
 
 $('btnFold').addEventListener('click', () => {
   const folded = $('console').classList.contains('fold');
-  setConsoleHeight(folded ? 200 : CONSOLE_MIN);
+  setConsoleHeight(folded ? 220 : CONSOLE_MIN);
 });
 
 {
