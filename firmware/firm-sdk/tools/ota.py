@@ -199,13 +199,18 @@ def open_serial(port, baud):
 
 def open_net(host):
     """CLI 는 텔넷, 데이터는 전용 포트. 텔넷은 붙자마자 IAC 협상을 보내는데
-    우리는 줄 단위로만 읽으므로 그 바이트는 read_line 이 알아서 버린다."""
+    우리는 줄 단위로만 읽으므로 그 바이트는 read_line 이 알아서 버린다.
+
+    데이터 포트는 붙은 뒤 잠시 기다린다. TCP 연결은 보드가 accept 하기 전에도
+    성립하는데, accept 은 net 스레드가 100ms 주기로 한다. 그 전에 명령을 보내면
+    보드가 "ready" 를 쓸 때 아직 소켓이 없어 그 문구가 사라진다."""
     cli = SockIO(host, TELNET_PORT)
     time.sleep(0.3)
     while cli.read(256):
         pass
 
     dat = SockIO(host, DATA_PORT)
+    time.sleep(0.5)
     return Link(cli, dat), []
 
 

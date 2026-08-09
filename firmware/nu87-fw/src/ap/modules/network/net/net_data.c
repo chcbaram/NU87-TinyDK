@@ -96,13 +96,25 @@ void netDataPoll(void)
     logPrintf("[OK] netData : port %d\n", data_port);
   }
 
-  if (client_sock < 0)
+  /* 새로 오는 쪽이 이긴다.
+   *
+   * 끊김 감지를 available() 에만 두면, 그것은 전송이 돌 때만 불리므로 실패로
+   * 죽은 소켓이 자리를 차지한 채 남고 새 연결이 백로그에서 영원히 대기한다.
+   *
+   * 그렇다고 여기서 소켓을 들여다보면 안 된다. 전송 중에는 CLI 스레드가 같은
+   * 소켓을 읽고 있어 한 소켓을 두 스레드가 동시에 읽게 되고, 잘못 판단하면
+   * 전송 한복판에 연결을 끊는다. 실제로 그렇게 24% 에서 멈췄다.
+   *
+   * 그래서 들여다보지 않고, 새 연결이 오면 옛것을 밀어낸다. 어차피 한 번에
+   * 하나만 쓰는 통로다. */
   {
     int fd = lwip_accept(listen_sock, NULL, NULL);
 
     if (fd >= 0)
     {
       int opt_on = 1;
+
+      if (client_sock >= 0) netDataClientClose();
 
       client_sock = fd;
       qbufferFlush(&rx_q);
